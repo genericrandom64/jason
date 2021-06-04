@@ -39,6 +39,16 @@ void copymirrors() {
 	// TODO im not writing a bad impl
 }
 
+// CPU REGISTERS
+
+uint16_t PC = 0;	// program counter
+uint8_t	S = 0,		// stack pointer
+	A = 0,		// accumulator
+	X = 0,		// X register
+	Y = 0,		// Y register
+	P = 0,		// status register
+	ITC;		// instruction timer to waste cycles until the instruction is supposed to be done
+
 // TODO do instructions explicitly unset status flags?
 // TODO implement overflow, negative, zero statuses in math ops
 
@@ -52,15 +62,41 @@ uint8_t int2bcd(uint8_t in) {
 	return l | r;
 }
 
-// CPU REGISTERS
-
-uint16_t PC = 0;	// program counter
-uint8_t	S = 0,		// stack pointer
-	A = 0,		// accumulator
-	X = 0,		// X register
-	Y = 0,		// Y register
-	P = 0,		// status register
-	ITC;		// instruction timer to waste cycles until the instruction is supposed to be done
+// TODO write adc16 for 16 bit addresses
+void adc8(uint8_t src, uint8_t *addreg) {
+	// TODO sign this and set overflow accordingly
+	uint16_t res = 0;
+	int cmpval = 0;
+	int8_t res8 = 0;
+	if(P & SET_P_DECIMAL != 0) {
+		res = *addreg + memmap[PC+1];
+		cmpval = *addreg + memmap[PC+1];
+		res8 = res & 0b0000000011111111;
+		if(res & 0b0000000100000000 != 0) {
+			P |= SET_P_CARRY;
+		} else {
+			P &= MASK_P_CARRY;
+		}
+	} else {
+		// TODO does bcd have sign?
+		int8_t AB = bcd2int(*addreg), CB = bcd2int(memmap[PC+1]);
+		res = AB + CB;
+		cmpval = AB + CB;
+		res8 = res & 0b0000000011111111;
+		// TODO set carry correctly
+		if(res & 0b0000000100000000 != 0) {
+			P |= SET_P_CARRY;
+		} else {
+			P &= MASK_P_CARRY;
+		}
+		res8 = int2bcd(res8);
+	}
+	// TODO is the result stored to A?
+	A = res8;
+	// TODO make sure cmp works
+	if(cmpval != res8) P |= SET_P_OVERFLOW;
+	PC+=2;
+}
 
 void op08() {
 	ITC = 3;
@@ -181,33 +217,14 @@ void op68() {
 	PC++;
 }
 
+void op65() {
+	ITC = 3;
+	adc8(memmap[memmap[PC+1]], &A);
+}
+
 void op69() {
 	ITC = 2;
-	uint16_t res = 0;
-	uint8_t res8 = 0;
-	if(P & SET_P_DECIMAL != 0) {
-		res = A + memmap[PC+1];
-		res8 = res & 0b0000000011111111;
-		if(res & 0b0000000100000000 != 0) {
-			P |= SET_P_CARRY;
-		} else {
-			P &= MASK_P_CARRY;
-		}
-	} else {
-		uint8_t AB = bcd2int(A), CB = bcd2int(memmap[PC+1]);
-		res = AB + CB;
-		res8 = res & 0b0000000011111111;
-		// TODO set carry correctly
-		if(res & 0b0000000100000000 != 0) {
-			P |= SET_P_CARRY;
-		} else {
-			P &= MASK_P_CARRY;
-		}
-		res8 = int2bcd(res8);
-	}
-	// TODO is the result stored to A?
-	A = res8;
-	PC+=2;
+	adc8(memmap[PC+1], &A);
 }
 
 void op6a() {
@@ -228,6 +245,11 @@ void op6a() {
 
 	PC++;
 
+}
+
+void op75() {
+	ITC = 3;
+	adc8(memmap[memmap[PC+1]], &X);
 }
 
 void op78() {
