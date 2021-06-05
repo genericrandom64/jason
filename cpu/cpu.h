@@ -1,5 +1,26 @@
 #include <stdint.h>
 #include <string.h>
+#include <stdio.h>
+
+// CPU REGISTERS
+
+uint16_t PC = 0;	// program counter
+uint8_t	S = 0,		// stack pointer
+	A = 0,		// accumulator
+	X = 0,		// X register
+	Y = 0,		// Y register
+	P = 0,		// status register
+	ITC;		// instruction timer to waste cycles until the instruction is supposed to be done
+
+// PROGRAM DEFINES AND FUNCTION PROTOTYPES
+
+#define UOP // We want undefined opcodes
+#define NO_DEC // TODO we do *not* want decimal mode in an NES emulator
+
+#define chkzero() if(A == 0) {P |= SET_P_ZERO;} else {P &= MASK_P_ZERO;}
+#define chkzerox() if(X == 0) {P |= SET_P_ZERO;} else {P &= MASK_P_ZERO;}
+#define chkzeroy() if(Y == 0) {P |= SET_P_ZERO;} else {P &= MASK_P_ZERO;}
+#define UOPMSG "UNDEFINED OPCODE: 0x%X. It will be treated as a NOP. Problems *will* occur."
 
 // MEMORY MAPPED REGISTERS
 // https://wiki.nesdev.com/w/index.php/2A03

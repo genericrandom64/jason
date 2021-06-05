@@ -11,6 +11,7 @@ char	vram[2048],	// 2kb of video ram
 	oam[256],	// sprite data
 	palette[28],	// on the ppu chip
 	memmap[0xFFFF],	// system memory
+// TODO might be wrong
 *stack = memmap+0x1FF;	// convenience pointer for the stack on page 1
 
 /* ADDR		TYPE
@@ -39,18 +40,9 @@ void copymirrors() {
 	// TODO im not writing a bad impl
 }
 
-// CPU REGISTERS
-
-uint16_t PC = 0;	// program counter
-uint8_t	S = 0,		// stack pointer
-	A = 0,		// accumulator
-	X = 0,		// X register
-	Y = 0,		// Y register
-	P = 0,		// status register
-	ITC;		// instruction timer to waste cycles until the instruction is supposed to be done
-
 // TODO do instructions explicitly unset status flags?
-// TODO implement overflow, negative, zero statuses in math ops
+// TODO implement overflow, negative statuses in math ops
+// TODO check that chkzero() isnt used where not needed, if not check A = 0 at step emulator instead of opcode emulator
 
 uint8_t bcd2int(uint8_t in) {
 	uint8_t l = (in >> 4)*10, r = in & 0b00001111;
@@ -60,6 +52,21 @@ uint8_t bcd2int(uint8_t in) {
 uint8_t int2bcd(uint8_t in) {
 	uint8_t l = ((in / 10) % 10) << 4, r = in % 10;
 	return l | r;
+}
+
+uint16_t short2addr(uint8_t lo, uint8_t hi) {
+	// TODO check that this shifts correctly
+
+	uint16_t addr = ((uint16_t) hi << 8) | lo;
+
+	// we have to mirror the wram and ppu registers, redirect reads
+	// TODO optimize this, this is quite honestly shitty
+	// wram mirrors
+	while(addr > 0x7FF && addr < 0x2000) addr -= 0x800;
+	// PPU reg mirrors
+	while(addr > 0x2007 && addr < 0x4000) addr -= 8;
+
+	return addr;
 }
 
 // TODO write adc16 for 16 bit addresses
@@ -93,8 +100,46 @@ void adc8(uint8_t src, uint8_t *addreg) {
 	}
 	// TODO is the result stored to A?
 	A = res8;
+	chkzero()
 	// TODO make sure cmp works
 	if(cmpval != res8) P |= SET_P_OVERFLOW;
+	PC+=2;
+}
+
+void bit(uint8_t src) {
+	if(src & 0b01000000 != 0) {
+		P |= SET_P_OVERFLOW;
+	} else {
+		P &= MASK_P_OVERFLOW;
+	} // bit 6
+
+	if(src & 0b10000000 != 0) {
+		P |= SET_P_NEGATIVE;
+	} else {
+		P &= MASK_P_NEGATIVE;
+	} // bit 7
+	// TODO is this ANDed correctly?
+	if(src & A == 0) {
+		P |= SET_P_ZERO;
+	} else {
+		P &= MASK_P_ZERO;
+	} // accumulator mask
+
+}
+
+void op06() {
+	ITC = 6;
+
+	A = memmap[memmap[PC+1]];
+
+	if(A & 0b10000000 != 0) {
+		P |= SET_P_CARRY;
+	} else {
+		P &= MASK_P_CARRY;
+	}
+
+	A <<= 1;
+	chkzero()
 	PC+=2;
 }
 
@@ -114,7 +159,25 @@ void op0a() {
 	}
 
 	A <<= 1;
+	chkzero()
 	PC++;
+}
+
+void op0e() {
+	ITC = 6;
+
+	A = memmap[short2addr(PC+1, PC+2)];
+
+	if(A & 0b10000000 != 0) {
+		P |= SET_P_CARRY;
+	} else {
+		P &= MASK_P_CARRY;
+	}
+
+	A <<= 1;
+	chkzero()
+	PC+=3;
+
 }
 
 void op18() {
@@ -123,9 +186,16 @@ void op18() {
 	PC++;
 }
 
+void op24() {
+	ITC = 3;
+	bit(memmap[memmap[PC+1]]);
+	PC+=2;
+}
+
 void op25() {
 	ITC = 3;
 	A &= memmap[memmap[PC+1]];
+	chkzero()
 	PC+=2;
 }
 
@@ -138,6 +208,7 @@ void op28() {
 void op29() {
 	ITC = 2;
 	A &= memmap[PC+1];
+	chkzero()
 	PC+=2;
 }
 
@@ -156,14 +227,22 @@ void op2a() {
 	A <<= 1;
 
 	if(tmp != 0) A |= 1;
+	chkzero()
 
 	PC++;
 
 }
 
+void op2c() {
+	ITC = 4;
+	bit(memmap[short2addr(PC+1, PC+2)]);
+	PC+=3;
+}
+
 void op35() {
 	ITC = 4;
 	A = memmap[memmap[PC+1]] & X;
+	chkzero()
 	PC+=2;
 }
 
@@ -202,6 +281,7 @@ void op4a() {
 	}
 
 	A >>= 1;
+	chkzero()
 	PC++;
 }
 
@@ -214,6 +294,7 @@ void op58() {
 void op68() {
 	ITC = 4;
 	A = stack[S++];
+	chkzero()
 	PC++;
 }
 
@@ -242,6 +323,7 @@ void op6a() {
 	A >>= 1;
 
 	if(tmp != 0) A |= 1 << 7;
+	chkzero()
 
 	PC++;
 
@@ -261,18 +343,35 @@ void op78() {
 void op88() {
 	ITC = 2;
 	Y--;
+	if(Y & 0b10000000 != 0) {
+		P |= SET_P_NEGATIVE;
+	} else {
+		P &= MASK_P_NEGATIVE;
+	}
 	PC++;
 }
 
 void op8a() {
 	ITC = 2;
 	A = X;
+	if(A & 0b10000000 != 0) {
+		P |= SET_P_NEGATIVE;
+	} else {
+		P &= MASK_P_NEGATIVE;
+	}
+	chkzero()
 	PC++;
 }
 
 void op98() {
 	ITC = 2;
 	A = Y;
+	chkzero()
+	if(A & 0b10000000 != 0) {
+		P |= SET_P_NEGATIVE;
+	} else {
+		P &= MASK_P_NEGATIVE;
+	}
 	PC++;
 }
 
@@ -285,13 +384,42 @@ void op9a() {
 void opa8() {
 	ITC = 2;
 	Y = A;
+	if(Y & 0b10000000 != 0) {
+		P |= SET_P_NEGATIVE;
+	} else {
+		P &= MASK_P_NEGATIVE;
+	}
+	chkzeroy()
 	PC++;
 }
 
 void opaa() {
 	ITC = 2;
 	X = A;
+	if(X & 0b10000000 != 0) {
+		P |= SET_P_NEGATIVE;
+	} else {
+		P &= MASK_P_NEGATIVE;
+	}
+	chkzerox()
 	PC++;
+}
+
+void opaf() {
+#ifndef UOP
+	A = memmap[short2addr(PC+1, PC+2)];
+	X = A;
+	if(X & 0b10000000 != 0) {
+		P |= SET_P_NEGATIVE;
+	} else {
+		P &= MASK_P_NEGATIVE;
+	}
+	chkzerox()
+#else
+	printf(UOPMSG, 0xAF);
+#endif
+	ITC = 4;
+	PC+=3;
 }
 
 void opb8() {
@@ -303,19 +431,61 @@ void opb8() {
 void opba() {
 	ITC = 2;
 	X = S;
+	if(X & 0b10000000 != 0) {
+		P |= SET_P_NEGATIVE;
+	} else {
+		P &= MASK_P_NEGATIVE;
+	}
+	chkzerox()
 	PC++;
+}
+
+void opc6() {
+	ITC = 5;
+	uint8_t tmp = memmap[PC+1];
+	memmap[PC+1]--;
+	if(tmp & 0b10000000 != 0) {
+		P |= SET_P_NEGATIVE;
+	} else {
+		P &= MASK_P_NEGATIVE;
+	}
+	if(tmp == 0) {P |= SET_P_ZERO;} else {P &= MASK_P_ZERO;}
+	PC+=2;
 }
 
 void opc8() {
 	ITC = 2;
 	Y++;
+	if(Y & 0b10000000 != 0) {
+		P |= SET_P_NEGATIVE;
+	} else {
+		P &= MASK_P_NEGATIVE;
+	}
 	PC++;
 }
 
 void opca() {
 	ITC = 2;
 	X--;
+	if(X & 0b10000000 != 0) {
+		P |= SET_P_NEGATIVE;
+	} else {
+		P &= MASK_P_NEGATIVE;
+	}
 	PC++;
+}
+
+void opce() {
+	ITC = 6;
+	uint8_t tmp = memmap[short2addr(PC+1, PC+2)];
+	memmap[short2addr(PC+1, PC+2)]--;
+	if(tmp & 0b10000000 != 0) {
+		P |= SET_P_NEGATIVE;
+	} else {
+		P &= MASK_P_NEGATIVE;
+	}
+	if(tmp == 0) {P |= SET_P_ZERO;} else {P &= MASK_P_ZERO;}
+	PC+=3;
 }
 
 void opd8() {
@@ -327,6 +497,12 @@ void opd8() {
 void ope8() {
 	ITC = 2;
 	X++;
+	if(X & 0b10000000 != 0) {
+		P |= SET_P_NEGATIVE;
+	} else {
+		P &= MASK_P_NEGATIVE;
+	}
+
 	PC++;
 }
 
