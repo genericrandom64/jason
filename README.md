@@ -16,7 +16,7 @@ no
 
 ## how compile? see funny number with letters in it over and over until go completely insane
 
-use `cpu/chk.sh` to compile j65. there are some tests in `tests/` but they do not cover the majority of opcodes yet. in fact, the JMP test doesn't even check page boundaries. that sentence is a reminder for me. test it.
+use `cpu/chk.sh` to compile j65. there are some tests in `tests/` but they do not cover the majority of opcodes yet.
 
 ## license?
 
