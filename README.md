@@ -18,6 +18,16 @@ no
 
 use `cpu/chk.sh` to compile j65. there are some tests in `tests/` but they do not cover the majority of opcodes yet.
 
+## references
+
+[6502 Reference](http://www.obelisk.me.uk/6502/reference.html)
+
+[Visual 6502](http://www.visual6502.org/JSSim/expert.html)
+
+[6502 Instruction Set](https://www.masswerk.at/6502/6502_instruction_set.html)
+
+[6502 Disassembler](https://www.masswerk.at/6502/disassembler.html)
+
 ## license?
 
 The entire emulator is public domain under the Unlicense.
