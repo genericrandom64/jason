@@ -33,6 +33,7 @@ SRCS = $(SRC_DIR)/cpu.c \
 TESTS = $(TEST_DIR)/flag.c \
 	$(TEST_DIR)/jmp.c \
 	$(TEST_DIR)/jmp-page-bound-error.c \
+	$(TEST_DIR)/branch.c \
 	$(TEST_DIR)/sysrq.c
 
 # define the C object files 

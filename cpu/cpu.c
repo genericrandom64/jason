@@ -46,6 +46,24 @@ char
 	// TODO the stack funcs are probably wrong, or this is; i have low confidence in the accuracy of the stack code considering the length of time it was written in
 	*stack = memmap+0x1FF;
 
+uint8_t new_page(int addr1, int addr2) {
+	if(addr1/0x100 == addr2/0x100) return 1;
+	return 0;
+}
+
+void branch() {
+	ITC++;
+	// TODO PC is incremented?
+	PC++;
+	// TODO will this work on a page bound ( DO | 01)?
+	if(new_page(PC-1, PC+(int8_t)memmap[PC])) ITC++;
+	PC+=(int8_t)memmap[PC];
+	PC++;
+}
+
+// TODO 2 stage pipeline?
+// https://retrocomputing.stackexchange.com/questions/5369/how-does-the-6502-implement-its-branch-instructions
+
 // see below comment
 //uint8_t pregupdmap[1024], wramupdmap[4];
 
@@ -110,14 +128,14 @@ void adc8(uint8_t src, uint8_t *addreg) {
 	uint16_t res = 0;
 	int cmpval = 0;
 	int8_t res8 = 0;
-	#ifndef NES
-	if(P & SET_P_DECIMAL != 0)
+	#ifndef NOBCD
+	if((P & SET_P_DECIMAL) != 0)
 	#endif
 	{
 		res = *addreg + memmap[PC+1];
 		cmpval = *addreg + memmap[PC+1];
 		res8 = res & 0b0000000011111111;
-		if(res & 0b0000000100000000 != 0) {
+		if((res & 0b0000000100000000) != 0) {
 			P |= SET_P_CARRY;
 		} else {
 			P &= MASK_P_CARRY;
@@ -131,7 +149,7 @@ void adc8(uint8_t src, uint8_t *addreg) {
 		cmpval = AB + CB;
 		res8 = res & 0b0000000011111111;
 		// TODO set carry correctly
-		if(res & 0b0000000100000000 != 0) {
+		if((res & 0b0000000100000000) != 0) {
 			P |= SET_P_CARRY;
 		} else {
 			P &= MASK_P_CARRY;
@@ -149,19 +167,19 @@ void adc8(uint8_t src, uint8_t *addreg) {
 }
 
 void bit(uint8_t src) {
-	if(src & 0b01000000 != 0) {
+	if((src & 0b01000000) != 0) {
 		P |= SET_P_OVERFLOW;
 	} else {
 		P &= MASK_P_OVERFLOW;
 	} // bit 6
 
-	if(src & 0b10000000 != 0) {
+	if((src & 0b10000000) != 0) {
 		P |= SET_P_NEGATIVE;
 	} else {
 		P &= MASK_P_NEGATIVE;
 	} // bit 7
 	// TODO is this ANDed correctly?
-	if(src & A == 0) {
+	if((src & A) == 0) {
 		P |= SET_P_ZERO;
 	} else {
 		P &= MASK_P_ZERO;
@@ -174,7 +192,7 @@ void op06() {
 
 	A = memmap[memmap[PC+1]];
 
-	if(A & 0b10000000 != 0) {
+	if((A & 0b10000000) != 0) {
 		P |= SET_P_CARRY;
 	} else {
 		P &= MASK_P_CARRY;
@@ -194,7 +212,7 @@ void op08() {
 void op0a() {
 	ITC = 2;
 
-	if(A & 0b10000000 != 0) {
+	if((A & 0b10000000) != 0) {
 		P |= SET_P_CARRY;
 	} else {
 		P &= MASK_P_CARRY;
@@ -210,7 +228,7 @@ void op0e() {
 
 	A = memmap[short2addr(PC+1, PC+2)];
 
-	if(A & 0b10000000 != 0) {
+	if((A & 0b10000000) != 0) {
 		P |= SET_P_CARRY;
 	} else {
 		P &= MASK_P_CARRY;
@@ -220,6 +238,12 @@ void op0e() {
 	chkzero()
 	PC+=3;
 
+}
+
+void op10() {
+	ITC = 2;
+	if((P & SET_P_NEGATIVE) == 0) branch();
+	else PC+=2;
 }
 
 void op18() {
@@ -260,7 +284,7 @@ void op2a() {
 
 	uint8_t tmp = P & SET_P_CARRY;
 
-	if(A & 0b10000000 != 0) {
+	if((A & 0b10000000) != 0) {
 		P |= SET_P_CARRY;
 	} else {
 		P &= MASK_P_CARRY;
@@ -279,6 +303,12 @@ void op2c() {
 	ITC = 4;
 	bit(memmap[short2addr(PC+1, PC+2)]);
 	PC+=3;
+}
+
+void op30() {
+	ITC = 2;
+	if((P & SET_P_NEGATIVE) != 0) branch();
+	else PC+=2;
 }
 
 void op35() {
@@ -318,7 +348,7 @@ void op48() {
 void op4a() {
 	ITC = 2;
 
-	if(A & 0b00000001 != 0) {
+	if((A & 0b00000001) != 0) {
 		P |= SET_P_CARRY;
 	} else {
 		P &= MASK_P_CARRY;
@@ -334,6 +364,12 @@ void op4a() {
 void op4c() {
 	ITC = 3;
 	PC = short2addr(memmap[PC+1], memmap[PC+2]);
+}
+
+void op50() {
+	ITC = 2;
+	if((P & SET_P_OVERFLOW) == 0) branch();
+	else PC+=2;
 }
 
 void op58() {
@@ -365,7 +401,7 @@ void op6a() {
 
 	uint8_t tmp = P & SET_P_CARRY;
 
-	if(A & 0b00000001 != 0) {
+	if((A & 0b00000001) != 0) {
 		P |= SET_P_CARRY;
 	} else {
 		P &= MASK_P_CARRY;
@@ -383,8 +419,14 @@ void op6a() {
 void op6c() {
 	ITC = 5;
 	uint16_t addr = short2addr(memmap[PC+1], memmap[PC+2]), acp = addr;
-	if((addr+1) % 0x100 == 0) addr-=0x100;
+	if(((addr+1) % 0x100) == 0) addr-=0x100;
 	PC = short2addr(memmap[acp], memmap[addr+1]);
+}
+
+void op70() {
+	ITC = 2;
+	if((P & SET_P_OVERFLOW) != 0) branch();
+	else PC+=2;
 }
 
 void op75() {
@@ -413,7 +455,7 @@ void op86() {
 void op88() {
 	ITC = 2;
 	Y--;
-	if(Y & 0b10000000 != 0) {
+	if((Y & 0b10000000) != 0) {
 		P |= SET_P_NEGATIVE;
 	} else {
 		P &= MASK_P_NEGATIVE;
@@ -424,7 +466,7 @@ void op88() {
 void op8a() {
 	ITC = 2;
 	A = X;
-	if(A & 0b10000000 != 0) {
+	if((A & 0b10000000) != 0) {
 		P |= SET_P_NEGATIVE;
 	} else {
 		P &= MASK_P_NEGATIVE;
@@ -456,11 +498,17 @@ void op8e() {
 	PC+=3;
 }
 
+void op90() {
+	ITC = 2;
+	if((P & SET_P_CARRY) == 0) branch();
+	else PC+=2;
+}
+
 void op98() {
 	ITC = 2;
 	A = Y;
 	chkzero()
-	if(A & 0b10000000 != 0) {
+	if((A & 0b10000000) != 0) {
 		P |= SET_P_NEGATIVE;
 	} else {
 		P &= MASK_P_NEGATIVE;
@@ -477,7 +525,7 @@ void op9a() {
 void opa8() {
 	ITC = 2;
 	Y = A;
-	if(Y & 0b10000000 != 0) {
+	if((Y & 0b10000000) != 0) {
 		P |= SET_P_NEGATIVE;
 	} else {
 		P &= MASK_P_NEGATIVE;
@@ -489,7 +537,7 @@ void opa8() {
 void opaa() {
 	ITC = 2;
 	X = A;
-	if(X & 0b10000000 != 0) {
+	if((X & 0b10000000) != 0) {
 		P |= SET_P_NEGATIVE;
 	} else {
 		P &= MASK_P_NEGATIVE;
@@ -514,7 +562,7 @@ void opaf() {
 #ifndef UOP
 	A = memmap[short2addr(PC+1, PC+2)];
 	X = A;
-	if(X & 0b10000000 != 0) {
+	if((X & 0b10000000) != 0) {
 		P |= SET_P_NEGATIVE;
 	} else {
 		P &= MASK_P_NEGATIVE;
@@ -527,6 +575,12 @@ void opaf() {
 	PC+=3;
 }
 
+void opb0() {
+	ITC = 2;
+	if((P & SET_P_CARRY) != 0) branch();
+	else PC+=2;
+}
+
 void opb8() {
 	ITC = 2;
 	P &= MASK_P_OVERFLOW;
@@ -536,7 +590,7 @@ void opb8() {
 void opba() {
 	ITC = 2;
 	X = S;
-	if(X & 0b10000000 != 0) {
+	if((X & 0b10000000) != 0) {
 		P |= SET_P_NEGATIVE;
 	} else {
 		P &= MASK_P_NEGATIVE;
@@ -550,7 +604,7 @@ void opc6() {
 	uint8_t tmp = memmap[PC+1];
 	tmp--;
 	memmap[PC+1]--;
-	if(tmp & 0b10000000 != 0) {
+	if((tmp & 0b10000000) != 0) {
 		P |= SET_P_NEGATIVE;
 	} else {
 		P &= MASK_P_NEGATIVE;
@@ -562,7 +616,7 @@ void opc6() {
 void opc8() {
 	ITC = 2;
 	Y++;
-	if(Y & 0b10000000 != 0) {
+	if((Y & 0b10000000) != 0) {
 		P |= SET_P_NEGATIVE;
 	} else {
 		P &= MASK_P_NEGATIVE;
@@ -573,7 +627,7 @@ void opc8() {
 void opca() {
 	ITC = 2;
 	X--;
-	if(X & 0b10000000 != 0) {
+	if((X & 0b10000000) != 0) {
 		P |= SET_P_NEGATIVE;
 	} else {
 		P &= MASK_P_NEGATIVE;
@@ -586,7 +640,7 @@ void opce() {
 	uint8_t tmp = memmap[short2addr(PC+1, PC+2)];
 	tmp--;
 	memmap[short2addr(PC+1, PC+2)]--;
-	if(tmp & 0b10000000 != 0) {
+	if((tmp & 0b10000000) != 0) {
 		P |= SET_P_NEGATIVE;
 	} else {
 		P &= MASK_P_NEGATIVE;
@@ -601,12 +655,18 @@ void opd8() {
 	PC++;
 }
 
+void opd0() {
+	ITC = 2;
+	if((P & SET_P_ZERO) == 0) branch();
+	else PC+=2;
+}
+
 void ope6() {
 	ITC = 5;
 	uint8_t tmp = memmap[PC+1];
 	tmp++;
 	memmap[PC+1]++;
-	if(tmp & 0b10000000 != 0) {
+	if((tmp & 0b10000000) != 0) {
 		P |= SET_P_NEGATIVE;
 	} else {
 		P &= MASK_P_NEGATIVE;
@@ -618,7 +678,7 @@ void ope6() {
 void ope8() {
 	ITC = 2;
 	X++;
-	if(X & 0b10000000 != 0) {
+	if((X & 0b10000000) != 0) {
 		P |= SET_P_NEGATIVE;
 	} else {
 		P &= MASK_P_NEGATIVE;
@@ -637,13 +697,19 @@ void opee() {
 	uint8_t tmp = memmap[short2addr(PC+1, PC+2)];
 	tmp++;
 	memmap[short2addr(PC+1, PC+2)]++;
-	if(tmp & 0b10000000 != 0) {
+	if((tmp & 0b10000000) != 0) {
 		P |= SET_P_NEGATIVE;
 	} else {
 		P &= MASK_P_NEGATIVE;
 	}
 	if(tmp == 0) {P |= SET_P_ZERO;} else {P &= MASK_P_ZERO;}
 	PC+=3;
+}
+
+void opf0() {
+	ITC = 2;
+	if((P & SET_P_ZERO) != 0) branch();
+	else PC+=2;
 }
 
 void opf8() {
@@ -655,21 +721,21 @@ void opf8() {
 // opcode map for tick() to use
 function_pointer_array opcodes[] = {
 NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &op06, NULL,  &op08, NULL,  &op0a, NULL,  NULL,  NULL,  &op0e, NULL,
-NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &op18, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,
+&op10, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &op18, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,
 NULL,  NULL,  NULL,  NULL,  &op24, &op25, NULL,  NULL,  &op28, &op29, &op2a, NULL,  &op2c, NULL,  NULL,  NULL,
-NULL,  NULL,  NULL,  NULL,  NULL,  &op35, NULL,  NULL,  &op38, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,
+&op30, NULL,  NULL,  NULL,  NULL,  &op35, NULL,  NULL,  &op38, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,
 &op40, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &op48, NULL,  &op4a, NULL,  &op4c, NULL,  NULL,  NULL,
-NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &op58, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,
+&op50, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &op58, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,
 &op60, NULL,  NULL,  NULL,  NULL,  &op65, NULL,  NULL,  &op68, &op69, &op6a, NULL,  &op6c, NULL,  NULL,  NULL,
-NULL,  NULL,  NULL,  NULL,  NULL,  &op75, NULL,  NULL,  &op78, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,
+&op70, NULL,  NULL,  NULL,  NULL,  &op75, NULL,  NULL,  &op78, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,
 NULL,  NULL,  NULL,  NULL,  &op84, NULL,  &op86, NULL,  &op88, NULL,  &op8a, &op8b, &op8c, NULL,  &op8e, NULL,
-NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &op98, NULL,  &op9a, NULL,  NULL,  NULL,  NULL,  NULL,
+&op90, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &op98, NULL,  &op9a, NULL,  NULL,  NULL,  NULL,  NULL,
 NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &opa8, NULL,  &opaa, &opab, NULL,  NULL,  NULL,  &opaf,
-NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &opb8, NULL,  &opba, NULL,  NULL,  NULL,  NULL,  NULL,
+&opb0, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &opb8, NULL,  &opba, NULL,  NULL,  NULL,  NULL,  NULL,
 NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &opc6, NULL,  &opc8, NULL,  &opca, NULL,  NULL,  NULL,  &opce, NULL,
-NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &opd8, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,
+&opd0, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &opd8, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,
 NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &ope6, NULL,  &ope8, NULL,  &opea, NULL,  NULL,  NULL,  &opee, NULL,
-NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &opf8, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL
+&opf0, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &opf8, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL
 };
 
 void tick() {
