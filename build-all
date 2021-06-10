@@ -1,0 +1,12 @@
+# Build j65. `make depend` is broken?
+
+cd cpu
+./chk.sh
+cd ..
+
+# build tests
+
+## make sure to rebuild tests, just in case
+make clean
+
+make

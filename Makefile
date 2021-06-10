@@ -6,19 +6,19 @@
 #
 
 # define the C compiler to use
-CC = gcc
+CC = cc
 
 # define any compile-time flags
-CFLAGS = -Wall -g
+CFLAGS = -Wall -ggdb3
 
 # define any directories containing header files other than /usr/include
 #
-INCLUDES = -I./cpu
+# INCLUDES = -I./cpu
 
 # define library paths in addition to /usr/lib
 #   if I wanted to include libraries not in /usr/lib I'd specify
 #   their path using -Lpath, something like:
-LFLAGS = -L./lib
+# LFLAGS = -L./lib
 
 # define any libraries to link into executable:
 #   if I want to link in libraries (libx.so or libx.a) I use the -llibname 
@@ -96,4 +96,20 @@ cpu/cpu.o: /usr/include/bits/types/__fpos64_t.h
 cpu/cpu.o: /usr/include/bits/types/__FILE.h /usr/include/bits/types/FILE.h
 cpu/cpu.o: /usr/include/bits/types/struct_FILE.h
 cpu/cpu.o: /usr/include/bits/stdio_lim.h /usr/include/bits/floatn.h
-cpu/cpu.o: /usr/include/bits/floatn-common.h
+cpu/cpu.o: /usr/include/bits/floatn-common.h /usr/include/stdlib.h
+cpu/cpu.o: /usr/include/bits/waitflags.h /usr/include/bits/waitstatus.h
+cpu/cpu.o: /usr/include/sys/types.h /usr/include/bits/types/clock_t.h
+cpu/cpu.o: /usr/include/bits/types/clockid_t.h
+cpu/cpu.o: /usr/include/bits/types/time_t.h /usr/include/bits/types/timer_t.h
+cpu/cpu.o: /usr/include/endian.h /usr/include/bits/endian.h
+cpu/cpu.o: /usr/include/bits/endianness.h /usr/include/bits/byteswap.h
+cpu/cpu.o: /usr/include/bits/uintn-identity.h /usr/include/sys/select.h
+cpu/cpu.o: /usr/include/bits/select.h /usr/include/bits/types/sigset_t.h
+cpu/cpu.o: /usr/include/bits/types/__sigset_t.h
+cpu/cpu.o: /usr/include/bits/types/struct_timeval.h
+cpu/cpu.o: /usr/include/bits/types/struct_timespec.h
+cpu/cpu.o: /usr/include/bits/pthreadtypes.h
+cpu/cpu.o: /usr/include/bits/thread-shared-types.h
+cpu/cpu.o: /usr/include/bits/pthreadtypes-arch.h
+cpu/cpu.o: /usr/include/bits/struct_mutex.h /usr/include/bits/struct_rwlock.h
+cpu/cpu.o: /usr/include/alloca.h /usr/include/bits/stdlib-float.h

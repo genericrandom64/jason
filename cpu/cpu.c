@@ -84,7 +84,14 @@ void copymirrors() {
 
 void system_request(uint8_t caller, uint8_t data) {
 	// TODO allow linked application to add system request handles
-	if(srqh == NULL) printf("Unhandled System Request: 0x%X 0x%X\n", caller, data);
+	if(srqh == NULL) {
+		printf("Unhandled System Request: 0x%X 0x%X\n", caller, data);
+		// simulate jams
+		if((memmap[PC] & 00001111) == 0x2) {
+			// TODO we need a MCM
+			printf("JAM! If there was a machine code monitor, it would be opened now.\n");
+		}
+	}
 	else (*srqh)(caller, data);
 }
 
@@ -187,6 +194,10 @@ void bit(uint8_t src) {
 
 }
 
+void op02() {
+	system_request(memmap[PC], memmap[PC+1]);
+}
+
 void op06() {
 	ITC = 6;
 
@@ -246,10 +257,18 @@ void op10() {
 	else PC+=2;
 }
 
+void op12() {
+	system_request(memmap[PC], memmap[PC+1]);
+}
+
 void op18() {
 	ITC = 2;
 	P &= MASK_P_CARRY;
 	PC++;
+}
+
+void op22() {
+	system_request(memmap[PC], memmap[PC+1]);
 }
 
 void op24() {
@@ -311,6 +330,10 @@ void op30() {
 	else PC+=2;
 }
 
+void op32() {
+	system_request(memmap[PC], memmap[PC+1]);
+}
+
 void op35() {
 	ITC = 4;
 	A = memmap[memmap[PC+1]] & X;
@@ -337,6 +360,10 @@ void op40() {
 	op60();
 	// simulating 2 opcodes has broken program counter, account for this
 	PC--;
+}
+
+void op42() {
+	system_request(memmap[PC], memmap[PC+1]);
 }
 
 void op48() {
@@ -372,10 +399,18 @@ void op50() {
 	else PC+=2;
 }
 
+void op52() {
+	system_request(memmap[PC], memmap[PC+1]);
+}
+
 void op58() {
 	ITC = 2;
 	P &= MASK_P_INT;
 	PC++;
+}
+
+void op62() {
+	system_request(memmap[PC], memmap[PC+1]);
 }
 
 void op68() {
@@ -427,6 +462,10 @@ void op70() {
 	ITC = 2;
 	if((P & SET_P_OVERFLOW) != 0) branch();
 	else PC+=2;
+}
+
+void op72() {
+	system_request(memmap[PC], memmap[PC+1]);
 }
 
 void op75() {
@@ -502,6 +541,10 @@ void op90() {
 	ITC = 2;
 	if((P & SET_P_CARRY) == 0) branch();
 	else PC+=2;
+}
+
+void op92() {
+	system_request(memmap[PC], memmap[PC+1]);
 }
 
 void op98() {
@@ -581,6 +624,10 @@ void opb0() {
 	else PC+=2;
 }
 
+void opb2() {
+	system_request(memmap[PC], memmap[PC+1]);
+}
+
 void opb8() {
 	ITC = 2;
 	P &= MASK_P_OVERFLOW;
@@ -649,6 +696,10 @@ void opce() {
 	PC+=3;
 }
 
+void opd2() {
+	system_request(memmap[PC], memmap[PC+1]);
+}
+
 void opd8() {
 	ITC = 2;
 	P &= MASK_P_DECIMAL;
@@ -712,6 +763,10 @@ void opf0() {
 	else PC+=2;
 }
 
+void opf2() {
+	system_request(memmap[PC], memmap[PC+1]);
+}
+
 void opf8() {
 	ITC = 2;
 	P |= SET_P_DECIMAL;
@@ -720,22 +775,22 @@ void opf8() {
 
 // opcode map for tick() to use
 function_pointer_array opcodes[] = {
-NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &op06, NULL,  &op08, NULL,  &op0a, NULL,  NULL,  NULL,  &op0e, NULL,
-&op10, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &op18, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,
-NULL,  NULL,  NULL,  NULL,  &op24, &op25, NULL,  NULL,  &op28, &op29, &op2a, NULL,  &op2c, NULL,  NULL,  NULL,
-&op30, NULL,  NULL,  NULL,  NULL,  &op35, NULL,  NULL,  &op38, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,
-&op40, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &op48, NULL,  &op4a, NULL,  &op4c, NULL,  NULL,  NULL,
-&op50, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &op58, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,
-&op60, NULL,  NULL,  NULL,  NULL,  &op65, NULL,  NULL,  &op68, &op69, &op6a, NULL,  &op6c, NULL,  NULL,  NULL,
-&op70, NULL,  NULL,  NULL,  NULL,  &op75, NULL,  NULL,  &op78, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,
+NULL,  NULL,  &op02, NULL,  NULL,  NULL,  &op06, NULL,  &op08, NULL,  &op0a, NULL,  NULL,  NULL,  &op0e, NULL,
+&op10, NULL,  &op12, NULL,  NULL,  NULL,  NULL,  NULL,  &op18, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,
+NULL,  NULL,  &op22, NULL,  &op24, &op25, NULL,  NULL,  &op28, &op29, &op2a, NULL,  &op2c, NULL,  NULL,  NULL,
+&op30, NULL,  &op32, NULL,  NULL,  &op35, NULL,  NULL,  &op38, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,
+&op40, NULL,  &op42, NULL,  NULL,  NULL,  NULL,  NULL,  &op48, NULL,  &op4a, NULL,  &op4c, NULL,  NULL,  NULL,
+&op50, NULL,  &op52, NULL,  NULL,  NULL,  NULL,  NULL,  &op58, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,
+&op60, NULL,  &op62, NULL,  NULL,  &op65, NULL,  NULL,  &op68, &op69, &op6a, NULL,  &op6c, NULL,  NULL,  NULL,
+&op70, NULL,  &op72, NULL,  NULL,  &op75, NULL,  NULL,  &op78, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,
 NULL,  NULL,  NULL,  NULL,  &op84, NULL,  &op86, NULL,  &op88, NULL,  &op8a, &op8b, &op8c, NULL,  &op8e, NULL,
-&op90, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &op98, NULL,  &op9a, NULL,  NULL,  NULL,  NULL,  NULL,
+&op90, NULL,  &op92, NULL,  NULL,  NULL,  NULL,  NULL,  &op98, NULL,  &op9a, NULL,  NULL,  NULL,  NULL,  NULL,
 NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &opa8, NULL,  &opaa, &opab, NULL,  NULL,  NULL,  &opaf,
-&opb0, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &opb8, NULL,  &opba, NULL,  NULL,  NULL,  NULL,  NULL,
+&opb0, NULL,  &opb2, NULL,  NULL,  NULL,  NULL,  NULL,  &opb8, NULL,  &opba, NULL,  NULL,  NULL,  NULL,  NULL,
 NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &opc6, NULL,  &opc8, NULL,  &opca, NULL,  NULL,  NULL,  &opce, NULL,
-&opd0, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &opd8, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,
+&opd0, NULL,  &opd2, NULL,  NULL,  NULL,  NULL,  NULL,  &opd8, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,
 NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &ope6, NULL,  &ope8, NULL,  &opea, NULL,  NULL,  NULL,  &opee, NULL,
-&opf0, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &opf8, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL
+&opf0, NULL,  &opf2, NULL,  NULL,  NULL,  NULL,  NULL,  &opf8, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL
 };
 
 void tick() {
