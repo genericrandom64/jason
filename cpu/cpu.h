@@ -10,12 +10,13 @@
 //#define NES
 
 #ifdef NOLIBC
-#warning While J6502 is mostly not reliant on libc, it requires working implementations of:
+#warning While j6502 is mostly not reliant on libc, it requires working implementations of:
 #warning memcpy.
 #warning You will have to provide the above functions or patch the code.
 #else
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #endif
 
 // CPU REGISTERS
