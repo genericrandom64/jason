@@ -44,9 +44,11 @@
  * 4020h-FFFFh	All cartridge memory (ROM, SRAM, etc)
  */
 
+// TODO make more stuff into their own functions to cut down on code size
+// TODO functions missing zero/negative checks
+
 uint16_t PC;
 uint8_t	S, A, X, Y, P, ITC;
-void (*srqh)(uint8_t a, uint8_t b) = NULL;
 char
 	#ifdef NES
 	vram[2048],	// 2kb of video ram
@@ -58,25 +60,16 @@ char
 	// the accuracy of the stack code considering the length of time it was written in
 	*stack = memmap+0x1FF;
 
-uint8_t new_page(int addr1, int addr2) {
-	if(addr1/0x100 == addr2/0x100) return 1;
-	return 0;
-}
+void (*srqh)(uint8_t a, uint8_t b) = NULL;
 
-void branch() {
-	ITC++;
-	PC++;
-	// TODO will this work on a page bound ( DO | 01)?
-	if(new_page(PC-1, PC+(int8_t)memmap[PC])) ITC++;
-	PC+=(int8_t)memmap[PC];
-	PC++;
-}
+#include "internal/common.h"
 
 // TODO page wrap might be wrong?
 // http://6502.org/tutorials/65c816opcodes.html#APPENDIX:
 // 5.1.1 seems to indicate problems in pages.
 
 // TODO does the 65c02 have different cycle times?
+// TODO use some damn pointers
 
 // TODO 2 stage pipeline?
 // https://retrocomputing.stackexchange.com/questions/5369/how-does-the-6502-implement-its-branch-instructions
@@ -97,125 +90,6 @@ void copymirrors() {
 // TODO check that chkzero() isnt used where not needed, if not check A = 0 at step emulator instead of opcode emulator
 // TODO do zpx/zpy take x/y signed or unsigned?
 
-void system_request(uint8_t caller, uint8_t data) {
-	if(srqh == NULL) {
-		printf("Unhandled System Request: 0x%X 0x%X\n", caller, data);
-		// simulate jams
-		if((memmap[PC] & 00001111) == 0x2) {
-			// TODO we need a MCM
-			// yknow that clip from like carnival night zone? well thats what we're doing
-			printf("JAM! If there was a machine code monitor, it would be opened now.\n");
-		}
-	}
-	else (*srqh)(caller, data);
-}
-
-void register_system_request(void *func) {
-	srqh = func;
-}
-
-#ifndef NOBCD
-uint8_t bcd2int(uint8_t in) {
-	uint8_t l = (in >> 4)*10, r = in & 0b00001111;
-	return l + r;
-}
-
-uint8_t int2bcd(uint8_t in) {
-	uint8_t l = ((in / 10) % 10) << 4, r = in % 10;
-	return l | r;
-}
-#endif
-
-uint16_t short2addr(uint8_t lo, uint8_t hi) {
-	uint16_t addr = (uint16_t) ((hi << 8) | (uint16_t) lo);
-
-	#ifdef NES
-	// we have to mirror the wram and ppu registers, redirect reads
-	// TODO optimize this, this is quite honestly shitty
-	// wram mirrors
-	while(addr > 0x7FF && addr < 0x2000) addr -= 0x800;
-	// PPU reg mirrors
-	while(addr > 0x2007 && addr < 0x4000) addr -= 8;
-	#endif
-
-	return addr;
-}
-
-void lax(uint8_t i) {
-	A = i;
-	X = i;
-}
-
-void xor(uint8_t x) {
-	// TODO is this correct?
-	A ^= x;
-}
-
-void adc8(uint8_t src, uint8_t *addreg) {
-	// TODO sign this and set overflow accordingly
-	// DO you sign this? i hate addition and subtraction now
-	uint16_t res = 0;
-	int cmpval = 0;
-	int8_t res8 = 0;
-	#ifndef NOBCD
-	if((P & SET_P_DECIMAL) != 0)
-	#endif
-	{
-		res = *addreg + memmap[PC+1];
-		cmpval = *addreg + memmap[PC+1];
-		res8 = res & 0b0000000011111111;
-		if((res & 0b0000000100000000) != 0) {
-			P |= SET_P_CARRY;
-		} else {
-			P &= MASK_P_CARRY;
-		}
-	}
-	#ifndef NOBCD
-	else {
-		// TODO does bcd have sign?
-		int8_t AB = bcd2int(*addreg), CB = bcd2int(memmap[PC+1]);
-		res = AB + CB;
-		cmpval = AB + CB;
-		res8 = res & 0b0000000011111111;
-		// TODO set carry correctly
-		if((res & 0b0000000100000000) != 0) {
-			P |= SET_P_CARRY;
-		} else {
-			P &= MASK_P_CARRY;
-		}
-		res8 = int2bcd(res8);
-	}
-	#endif
-	// TODO is the result stored to A?
-	A = res8;
-	chkzero()
-	// TODO make sure cmp works
-	if(cmpval != res8) P |= SET_P_OVERFLOW;
-	// TODO THIS DOES NOT WORK. cannot believe i missed this because it breaks absolute address opcodes
-	PC+=2;
-}
-
-void bit(uint8_t src) {
-	if((src & 0b01000000) != 0) {
-		P |= SET_P_OVERFLOW;
-	} else {
-		P &= MASK_P_OVERFLOW;
-	} // bit 6
-
-	if((src & 0b10000000) != 0) {
-		P |= SET_P_NEGATIVE;
-	} else {
-		P &= MASK_P_NEGATIVE;
-	} // bit 7
-	// TODO is this ANDed correctly?
-	// no? check
-	if((src & A) == 0) {
-		P |= SET_P_ZERO;
-	} else {
-		P &= MASK_P_ZERO;
-	} // accumulator mask
-
-}
 
 void op02() {
 	system_request(memmap[PC], memmap[PC+1]);
@@ -230,6 +104,12 @@ void op04() {
 	opea();
 	ITC++;
 	PC++;
+}
+
+void op05() {
+	ITC = 3;
+	or(memmap[memmap[PC+1]]);
+	PC+=2;
 }
 
 void op06() {
@@ -254,6 +134,12 @@ void op08() {
 	PC++;
 }
 
+void op09() {
+	ITC = 2;
+	or(memmap[PC+1]);
+	PC+=2;
+}
+
 void op0a() {
 	ITC = 2;
 
@@ -272,6 +158,12 @@ void op0c() {
 	opea();
 	ITC+=2;
 	PC+=2;
+}
+
+void op0d() {
+	ITC = 4;
+	or(memmap[short2addr(memmap[PC+1], memmap[PC+2])]);
+	PC+=3;
 }
 
 void op0e() {
@@ -305,6 +197,13 @@ void op14() {
 	opea();
 	ITC+=2;
 	PC++;
+}
+
+void op15() {
+	ITC = 4;
+	// dear god
+	or(memmap[memmap[zpz(X, memmap[PC+1])]]);
+	PC+=2;
 }
 
 void op18() {
@@ -513,6 +412,12 @@ void op54() {
 	PC++;
 }
 
+void op55() {
+	ITC = 3;
+	xor(memmap[memmap[zpz(X, memmap[PC+1])]]);
+	PC+=2;
+}
+
 void op58() {
 	ITC = 2;
 	P &= MASK_P_INT;
@@ -718,6 +623,24 @@ void op92() {
 	system_request(memmap[PC], memmap[PC+1]);
 }
 
+void op94() {
+	ITC = 4;
+	memmap[memmap[zpz(X, memmap[PC+1])]] = Y;
+	PC+=2;
+}
+
+void op95() {
+	ITC = 4;
+	memmap[memmap[zpz(X, memmap[PC+1])]] = A;
+	PC+=2;
+}
+
+void op96() {
+	ITC = 4;
+	memmap[memmap[zpz(Y, memmap[PC+1])]] = X;
+	PC+=2;
+}
+
 void op98() {
 	ITC = 2;
 	A = Y;
@@ -738,7 +661,7 @@ void op9a() {
 
 void opa5() {
 	ITC = 3;
-	A = memmap[memmap[PC+1]];
+	lda(memmap[memmap[PC+1]]);
 	PC+=2;
 }
 
@@ -762,7 +685,7 @@ void opa8() {
 
 void opa9() {
 	ITC = 2;
-	A = memmap[PC+1];
+	lda(memmap[PC+1]);
 	PC+=2;
 }
 
@@ -788,7 +711,7 @@ void opab() {
 
 void opad() {
 	ITC = 4;
-	A = memmap[short2addr(memmap[PC+1], memmap[PC+2])];
+	lda(memmap[short2addr(memmap[PC+1], memmap[PC+2])]);
 	PC+=3;
 }
 
@@ -813,6 +736,24 @@ void opb0() {
 
 void opb2() {
 	system_request(memmap[PC], memmap[PC+1]);
+}
+
+void opb4() {
+	ITC = 4;
+	ldy(memmap[memmap[zpz(X, memmap[PC+1])]]);
+	PC+=2;
+}
+
+void opb5() {
+	ITC = 4;
+	lda(memmap[memmap[zpz(X, memmap[PC+1])]]);
+	PC+=2;
+}
+
+void opb6() {
+	ITC = 4;
+	ldx(memmap[memmap[zpz(Y, memmap[PC+1])]]);
+	PC+=2;
 }
 
 void opb8() {
@@ -999,18 +940,18 @@ void opfc() {
 // opcode map for tick() to use
 function_pointer_array opcodes[] = {
 //  0  1      2      3      4      5      6      7      8      9      a      b      c      d      e      f
-NULL,  NULL,  &op02, NULL,  &op04, NULL,  &op06, NULL,  &op08, NULL,  &op0a, NULL,  &op0c, NULL,  &op0e, NULL, // 0
-&op10, NULL,  &op12, NULL,  &op14, NULL,  NULL,  NULL,  &op18, NULL,  NULL,  NULL,  &op1c, NULL,  NULL,  NULL, // 1
+NULL,  NULL,  &op02, NULL,  &op04, &op05, &op06, NULL,  &op08, &op09, &op0a, NULL,  &op0c, &op0d, &op0e, NULL, // 0
+&op10, NULL,  &op12, NULL,  &op14, &op15, NULL,  NULL,  &op18, NULL,  NULL,  NULL,  &op1c, NULL,  NULL,  NULL, // 1
 &op20, NULL,  &op22, NULL,  &op24, &op25, NULL,  NULL,  &op28, &op29, &op2a, NULL,  &op2c, NULL,  NULL,  NULL, // 2
 &op30, NULL,  &op32, NULL,  &op34, &op35, NULL,  NULL,  &op38, NULL,  NULL,  NULL,  &op3c, NULL,  NULL,  NULL, // 3
 &op40, NULL,  &op42, NULL,  &op44, &op45, NULL,  NULL,  &op48, &op49, &op4a, NULL,  &op4c, &op4d, NULL,  NULL, // 4
-&op50, NULL,  &op52, NULL,  &op54, NULL,  NULL,  NULL,  &op58, NULL,  NULL,  NULL,  &op5c, NULL,  NULL,  NULL, // 5
+&op50, NULL,  &op52, NULL,  &op54, &op55, NULL,  NULL,  &op58, NULL,  NULL,  NULL,  &op5c, NULL,  NULL,  NULL, // 5
 &op60, NULL,  &op62, NULL,  &op64, &op65, NULL,  NULL,  &op68, &op69, &op6a, NULL,  &op6c, NULL,  NULL,  NULL, // 6
 &op70, NULL,  &op72, NULL,  &op74, &op75, NULL,  NULL,  &op78, NULL,  NULL,  NULL,  &op7c, NULL,  NULL,  NULL, // 7
 &op80, NULL,  &op82, NULL,  &op84, NULL,  &op86, &op87, &op88, &op89, &op8a, &op8b, &op8c, NULL,  &op8e, &op8f,// 8
-&op90, NULL,  &op92, NULL,  NULL,  NULL,  NULL,  NULL,  &op98, NULL,  &op9a, NULL,  NULL,  NULL,  NULL,  NULL, // 9
+&op90, NULL,  &op92, NULL,  &op94, &op95, &op96, NULL,  &op98, NULL,  &op9a, NULL,  NULL,  NULL,  NULL,  NULL, // 9
 NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &opa5, &opa7, &opa8, &opa9, &opaa, &opab, NULL,  &opad, NULL,  &opaf,// a
-&opb0, NULL,  &opb2, NULL,  NULL,  NULL,  NULL,  NULL,  &opb8, NULL,  &opba, NULL,  NULL,  NULL,  NULL,  NULL, // b
+&opb0, NULL,  &opb2, NULL,  &opb4, NULL,  &opb5, &opb6, &opb8, NULL,  &opba, NULL,  NULL,  NULL,  NULL,  NULL, // b
 NULL,  NULL,  &opc2, NULL,  NULL,  NULL,  &opc6, NULL,  &opc8, NULL,  &opca, NULL,  NULL,  NULL,  &opce, NULL, // c
 &opd0, NULL,  &opd2, NULL,  &opd4, NULL,  NULL,  NULL,  &opd8, NULL,  NULL,  NULL,  &opdc, NULL,  NULL,  NULL, // d
 NULL,  NULL,  &ope2, NULL,  NULL,  NULL,  &ope6, NULL,  &ope8, NULL,  &opea, NULL,  NULL,  NULL,  &opee, NULL, // e
