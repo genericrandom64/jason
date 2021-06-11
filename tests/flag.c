@@ -11,7 +11,7 @@ int main() {
 	memmap[1] = 0xF8;
 	memmap[2] = 0x78;
 	while(PC < 3) tick();
-	assert(P & 0b00001101 == 0b00001101);
+	assert((P & 0b00001101) == 0b00001101);
 	// test CLV by setting overflow manually
 	P |= 0b01000000;
 	// test CL*

@@ -22,7 +22,7 @@
 // CPU REGISTERS
 
 extern uint16_t PC;	// program counter
-extern uint8_t	S,		// stack pointer
+extern uint8_t	S,	// stack pointer
 	A,		// accumulator
 	X,		// X register
 	Y,		// Y register
@@ -119,6 +119,7 @@ typedef void(*function_pointer_array)();
 // AC - ACcumulator
 // AB - uses ABsolute addresses
 
+/*
 #define OP_BRK		0x00 // break, PC++; time 7
 #define OP_ORA_IX	0x01 // OR with accumulator, PC+=2; time 6
 #define OP_		0x02
@@ -407,3 +408,4 @@ typedef void(*function_pointer_array)();
 #define OP_FD		0xFD
 #define OP_FE		0xFE
 #define OP_FF		0xFF
+*/

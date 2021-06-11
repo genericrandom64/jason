@@ -96,7 +96,7 @@ int main() {
 	memmap[0] = 0xD0;
 	P |= SET_P_ZERO;
 	testz();
-	printf("BNE passed.\n");
+	printf("Untaken BNE passed.\n");
 
 	memmap[0] = 0x10;
 	P |= SET_P_NEGATIVE;
@@ -121,6 +121,7 @@ int main() {
 	for(uint8_t i = 0; i < 10; i++) {tick(); assert(PC < 0x1011 && PC > 0x100F);}
 
 	printf("Negative branch test passed.\n");
+
 	printf("All branch tests passed.\n");
 
 }

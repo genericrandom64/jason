@@ -1,6 +1,7 @@
 void copymirrors();
 void adc8(uint8_t src, uint8_t *addreg);
 void bit(uint8_t src);
+void register_system_request(void *func);
 void op06();
 void op08();
 void op0a();

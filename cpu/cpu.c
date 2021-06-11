@@ -1,16 +1,27 @@
 /* J65: 6502-based chip emulator
  *
  * Supported chips:
- * 	Ricoh 2A03	(TODO Code still heavily based on NES memory mappings)
+ *
+ * WIP chips:
+ * 	MOS 6502	(KIM-1, PET, VIC-20 emulation)
+ * 	+	This is the current focus.
+ *
+ * 	WDC 65C02	(Modern 65c02 system emulation)
+ * 	WDC 65sc02
+ * 	+	This will be implemented with an opcode map. It's
+ *		secondary but should be done when the 6502 is done.
+ *
+ * 	Ricoh 2A03	(Is the code still heavily based on NES memory mappings?)
  *
  * Planned support:
- * 	MOS 6502	(VIC-20 emulation)
  * 	WDC 65C816	(SNES emulation)
  *
  * by genericrandom64
  * Public-domain software
  */
 
+// TODO remove UOP in favor of WDC_65C02 opcode map
+#define NMOS_6502
 #include "cpu.h"
 
 #ifdef NES
@@ -43,7 +54,8 @@ char
 	palette[28],	// on the ppu chip
 	#endif
 	memmap[0xFFFF],	// system memory
-	// TODO the stack funcs are probably wrong, or this is; i have low confidence in the accuracy of the stack code considering the length of time it was written in
+	// TODO the stack funcs are probably wrong, or this is; i have low confidence in
+	// the accuracy of the stack code considering the length of time it was written in
 	*stack = memmap+0x1FF;
 
 uint8_t new_page(int addr1, int addr2) {
@@ -53,13 +65,18 @@ uint8_t new_page(int addr1, int addr2) {
 
 void branch() {
 	ITC++;
-	// TODO PC is incremented?
 	PC++;
 	// TODO will this work on a page bound ( DO | 01)?
 	if(new_page(PC-1, PC+(int8_t)memmap[PC])) ITC++;
 	PC+=(int8_t)memmap[PC];
 	PC++;
 }
+
+// TODO page wrap might be wrong?
+// http://6502.org/tutorials/65c816opcodes.html#APPENDIX:
+// 5.1.1 seems to indicate problems in pages.
+
+// TODO does the 65c02 have different cycle times?
 
 // TODO 2 stage pipeline?
 // https://retrocomputing.stackexchange.com/questions/5369/how-does-the-6502-implement-its-branch-instructions
@@ -73,22 +90,20 @@ void copymirrors() {
 	// Copy WRAM
 	for(uint8_t i = 1; i < 4; i++) memcpy(memmap, (memmap+(0x800*i)), 0x800);
 	// Copy PPU registers
-	// TODO im not writing a bad impl
 }
 */
 
-// TODO do instructions explicitly unset status flags?
 // TODO implement overflow, negative statuses in math ops
 // TODO check that chkzero() isnt used where not needed, if not check A = 0 at step emulator instead of opcode emulator
 // TODO do zpx/zpy take x/y signed or unsigned?
 
 void system_request(uint8_t caller, uint8_t data) {
-	// TODO allow linked application to add system request handles
 	if(srqh == NULL) {
 		printf("Unhandled System Request: 0x%X 0x%X\n", caller, data);
 		// simulate jams
 		if((memmap[PC] & 00001111) == 0x2) {
 			// TODO we need a MCM
+			// yknow that clip from like carnival night zone? well thats what we're doing
 			printf("JAM! If there was a machine code monitor, it would be opened now.\n");
 		}
 	}
@@ -112,8 +127,6 @@ uint8_t int2bcd(uint8_t in) {
 #endif
 
 uint16_t short2addr(uint8_t lo, uint8_t hi) {
-	// TODO check that this shifts correctly
-
 	uint16_t addr = (uint16_t) ((hi << 8) | (uint16_t) lo);
 
 	#ifdef NES
@@ -128,7 +141,16 @@ uint16_t short2addr(uint8_t lo, uint8_t hi) {
 	return addr;
 }
 
-// TODO write adc16 for 16 bit addresses
+void lax(uint8_t i) {
+	A = i;
+	X = i;
+}
+
+void xor(uint8_t x) {
+	// TODO is this correct?
+	A ^= x;
+}
+
 void adc8(uint8_t src, uint8_t *addreg) {
 	// TODO sign this and set overflow accordingly
 	// DO you sign this? i hate addition and subtraction now
@@ -186,6 +208,7 @@ void bit(uint8_t src) {
 		P &= MASK_P_NEGATIVE;
 	} // bit 7
 	// TODO is this ANDed correctly?
+	// no? check
 	if((src & A) == 0) {
 		P |= SET_P_ZERO;
 	} else {
@@ -196,6 +219,17 @@ void bit(uint8_t src) {
 
 void op02() {
 	system_request(memmap[PC], memmap[PC+1]);
+}
+
+void opea() {
+	ITC = 2;
+	PC++;
+}
+
+void op04() {
+	opea();
+	ITC++;
+	PC++;
 }
 
 void op06() {
@@ -234,6 +268,12 @@ void op0a() {
 	PC++;
 }
 
+void op0c() {
+	opea();
+	ITC+=2;
+	PC+=2;
+}
+
 void op0e() {
 	ITC = 6;
 
@@ -261,10 +301,40 @@ void op12() {
 	system_request(memmap[PC], memmap[PC+1]);
 }
 
+void op14() {
+	opea();
+	ITC+=2;
+	PC++;
+}
+
 void op18() {
 	ITC = 2;
 	P &= MASK_P_CARRY;
 	PC++;
+}
+
+void op1a() {
+	opea();
+}
+
+void op1c() {
+	ITC = 4;
+	uint16_t addr = short2addr(memmap[PC+1], memmap[PC+2]), addrx = addr+X;
+	if(new_page(addr, addrx) == 1) ITC++;
+	PC+=3;
+}
+
+void op4c() {
+	ITC = 3;
+	PC = short2addr(memmap[PC+1], memmap[PC+2]);
+}
+
+void op20() {
+	// TODO i have no idea if this is right
+	stack[S--] = (uint8_t) PC+2;
+	stack[S--] = PC+2 >> 8;
+	op4c();
+	ITC = 6;
 }
 
 void op22() {
@@ -334,6 +404,12 @@ void op32() {
 	system_request(memmap[PC], memmap[PC+1]);
 }
 
+void op34() {
+	opea();
+	ITC+=2;
+	PC++;
+}
+
 void op35() {
 	ITC = 4;
 	A = memmap[memmap[PC+1]] & X;
@@ -345,6 +421,17 @@ void op38() {
 	ITC = 2;
 	P |= SET_P_CARRY;
 	PC++;
+}
+
+void op3a() {
+	opea();
+}
+
+void op3c() {
+	ITC = 4;
+	uint16_t addr = short2addr(memmap[PC+1], memmap[PC+2]), addrx = addr+X;
+	if(new_page(addr, addrx) == 1) ITC++;
+	PC+=3;
 }
 
 void op60() {
@@ -366,10 +453,28 @@ void op42() {
 	system_request(memmap[PC], memmap[PC+1]);
 }
 
+void op44() {
+	opea();
+	ITC++;
+	PC++;
+}
+
+void op45() {
+	ITC = 3;
+	xor(memmap[memmap[PC+1]]);
+	PC+=2;
+}
+
 void op48() {
 	ITC = 3;
 	stack[S--] = A;
 	PC++;
+}
+
+void op49() {
+	ITC = 2;
+	xor(memmap[PC+1]);
+	PC+=2;
 }
 
 void op4a() {
@@ -386,11 +491,10 @@ void op4a() {
 	PC++;
 }
 
-// uint16_t addr = ((uint16_t) hi << 8) | lo;
-
-void op4c() {
-	ITC = 3;
-	PC = short2addr(memmap[PC+1], memmap[PC+2]);
+void op4d() {
+	ITC = 4;
+	xor(short2addr(memmap[PC+1], memmap[PC+2]));
+	PC+=3;
 }
 
 void op50() {
@@ -403,14 +507,37 @@ void op52() {
 	system_request(memmap[PC], memmap[PC+1]);
 }
 
+void op54() {
+	opea();
+	ITC+=2;
+	PC++;
+}
+
 void op58() {
 	ITC = 2;
 	P &= MASK_P_INT;
 	PC++;
 }
 
+void op5a() {
+	opea();
+}
+
+void op5c() {
+	ITC = 4;
+	uint16_t addr = short2addr(memmap[PC+1], memmap[PC+2]), addrx = addr+X;
+	if(new_page(addr, addrx) == 1) ITC++;
+	PC+=3;
+}
+
 void op62() {
 	system_request(memmap[PC], memmap[PC+1]);
+}
+
+void op64() {
+	opea();
+	ITC++;
+	PC++;
 }
 
 void op68() {
@@ -454,7 +581,11 @@ void op6a() {
 void op6c() {
 	ITC = 5;
 	uint16_t addr = short2addr(memmap[PC+1], memmap[PC+2]), acp = addr;
+	#ifdef NMOS_6502
+	// only do this on a 6502
+	// 65c02 fixes this
 	if(((addr+1) % 0x100) == 0) addr-=0x100;
+	#endif
 	PC = short2addr(memmap[acp], memmap[addr+1]);
 }
 
@@ -468,6 +599,12 @@ void op72() {
 	system_request(memmap[PC], memmap[PC+1]);
 }
 
+void op74() {
+	opea();
+	ITC+=2;
+	PC++;
+}
+
 void op75() {
 	ITC = 3;
 	adc8(memmap[memmap[PC+1]], &X);
@@ -476,6 +613,27 @@ void op75() {
 void op78() {
 	ITC = 2;
 	P |= SET_P_INT;
+	PC++;
+}
+
+void op7a() {
+	opea();
+}
+
+void op7c() {
+	ITC = 4;
+	uint16_t addr = short2addr(memmap[PC+1], memmap[PC+2]), addrx = addr+X;
+	if(new_page(addr, addrx) == 1) ITC++;
+	PC+=3;
+}
+
+void op80() {
+	opea();
+	PC++;
+}
+
+void op82() {
+	opea();
 	PC++;
 }
 
@@ -491,6 +649,12 @@ void op86() {
 	PC+=2;
 }
 
+void op87() {
+	ITC = 3;
+	memmap[memmap[PC+1]] = A & X;
+	PC+=2;
+}
+
 void op88() {
 	ITC = 2;
 	Y--;
@@ -499,6 +663,11 @@ void op88() {
 	} else {
 		P &= MASK_P_NEGATIVE;
 	}
+	PC++;
+}
+
+void op89() {
+	opea();
 	PC++;
 }
 
@@ -516,11 +685,7 @@ void op8a() {
 
 void op8b() {
 	ITC = 2;
-#ifndef UOP
-	printf(UOPMSG, 0x8B);
-#else
 	A = X & A & memmap[PC+1];
-#endif
 	system_request(0x8B, memmap[PC+1]);
 	PC+=2;
 }
@@ -534,6 +699,12 @@ void op8c() {
 void op8e() {
 	ITC = 4;
 	memmap[short2addr(PC+1, PC+2)] = X;
+	PC+=3;
+}
+
+void op8f() {
+	ITC = 4;
+	memmap[short2addr(memmap[PC+1], memmap[PC+2])] = A & X;
 	PC+=3;
 }
 
@@ -565,6 +736,18 @@ void op9a() {
 	PC++;
 }
 
+void opa5() {
+	ITC = 3;
+	A = memmap[memmap[PC+1]];
+	PC+=2;
+}
+
+void opa7() {
+	ITC = 3;
+	lax(memmap[memmap[PC+1]]);
+	PC+=2;
+}
+
 void opa8() {
 	ITC = 2;
 	Y = A;
@@ -575,6 +758,12 @@ void opa8() {
 	}
 	chkzeroy()
 	PC++;
+}
+
+void opa9() {
+	ITC = 2;
+	A = memmap[PC+1];
+	PC+=2;
 }
 
 void opaa() {
@@ -591,18 +780,19 @@ void opaa() {
 
 void opab() {
 	ITC = 2;
-#ifndef UOP
-	printf(UOPMSG, 0xAB);
-#else
 	A &= memmap[PC+1];
 	X = A & memmap[PC+1];
-#endif
 	system_request(0xAB, memmap[PC+1]);
 	PC+=2;
 }
 
+void opad() {
+	ITC = 4;
+	A = memmap[short2addr(memmap[PC+1], memmap[PC+2])];
+	PC+=3;
+}
+
 void opaf() {
-#ifndef UOP
 	A = memmap[short2addr(PC+1, PC+2)];
 	X = A;
 	if((X & 0b10000000) != 0) {
@@ -611,9 +801,6 @@ void opaf() {
 		P &= MASK_P_NEGATIVE;
 	}
 	chkzerox()
-#else
-	printf(UOPMSG, 0xAF);
-#endif
 	ITC = 4;
 	PC+=3;
 }
@@ -643,6 +830,11 @@ void opba() {
 		P &= MASK_P_NEGATIVE;
 	}
 	chkzerox()
+	PC++;
+}
+
+void opc2() {
+	opea();
 	PC++;
 }
 
@@ -700,6 +892,12 @@ void opd2() {
 	system_request(memmap[PC], memmap[PC+1]);
 }
 
+void opd4() {
+	opea();
+	ITC+=2;
+	PC++;
+}
+
 void opd8() {
 	ITC = 2;
 	P &= MASK_P_DECIMAL;
@@ -710,6 +908,22 @@ void opd0() {
 	ITC = 2;
 	if((P & SET_P_ZERO) == 0) branch();
 	else PC+=2;
+}
+
+void opda() {
+	opea();
+}
+
+void opdc() {
+	ITC = 4;
+	uint16_t addr = short2addr(memmap[PC+1], memmap[PC+2]), addrx = addr+X;
+	if(new_page(addr, addrx) == 1) ITC++;
+	PC+=3;
+}
+
+void ope2() {
+	opea();
+	PC++;
 }
 
 void ope6() {
@@ -738,21 +952,11 @@ void ope8() {
 	PC++;
 }
 
-void opea() {
-	ITC = 2;
-	PC++;
-}
-
 void opee() {
 	ITC = 6;
-	uint8_t tmp = memmap[short2addr(PC+1, PC+2)];
-	tmp++;
-	memmap[short2addr(PC+1, PC+2)]++;
-	if((tmp & 0b10000000) != 0) {
-		P |= SET_P_NEGATIVE;
-	} else {
-		P &= MASK_P_NEGATIVE;
-	}
+	uint8_t tmp = memmap[short2addr(PC+1, PC+2)] + 1;
+	memmap[short2addr(PC+1, PC+2)] = tmp;
+	if((tmp & 0b10000000) != 0) {P |= SET_P_NEGATIVE;} else {P &= MASK_P_NEGATIVE;}
 	if(tmp == 0) {P |= SET_P_ZERO;} else {P &= MASK_P_ZERO;}
 	PC+=3;
 }
@@ -767,35 +971,67 @@ void opf2() {
 	system_request(memmap[PC], memmap[PC+1]);
 }
 
+void opf4() {
+	opea();
+	ITC+=2;
+	PC++;
+}
+
 void opf8() {
 	ITC = 2;
 	P |= SET_P_DECIMAL;
 	PC++;
 }
 
+void opfa() {
+	opea();
+}
+
+void opfc() {
+	ITC = 4;
+	uint16_t addr = short2addr(memmap[PC+1], memmap[PC+2]), addrx = addr+X;
+	if(new_page(addr, addrx) == 1) ITC++;
+	PC+=3;
+}
+
+#ifdef NMOS_6502
+#undef WDC_65C02
 // opcode map for tick() to use
 function_pointer_array opcodes[] = {
-NULL,  NULL,  &op02, NULL,  NULL,  NULL,  &op06, NULL,  &op08, NULL,  &op0a, NULL,  NULL,  NULL,  &op0e, NULL,
-&op10, NULL,  &op12, NULL,  NULL,  NULL,  NULL,  NULL,  &op18, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,
-NULL,  NULL,  &op22, NULL,  &op24, &op25, NULL,  NULL,  &op28, &op29, &op2a, NULL,  &op2c, NULL,  NULL,  NULL,
-&op30, NULL,  &op32, NULL,  NULL,  &op35, NULL,  NULL,  &op38, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,
-&op40, NULL,  &op42, NULL,  NULL,  NULL,  NULL,  NULL,  &op48, NULL,  &op4a, NULL,  &op4c, NULL,  NULL,  NULL,
-&op50, NULL,  &op52, NULL,  NULL,  NULL,  NULL,  NULL,  &op58, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,
-&op60, NULL,  &op62, NULL,  NULL,  &op65, NULL,  NULL,  &op68, &op69, &op6a, NULL,  &op6c, NULL,  NULL,  NULL,
-&op70, NULL,  &op72, NULL,  NULL,  &op75, NULL,  NULL,  &op78, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,
-NULL,  NULL,  NULL,  NULL,  &op84, NULL,  &op86, NULL,  &op88, NULL,  &op8a, &op8b, &op8c, NULL,  &op8e, NULL,
-&op90, NULL,  &op92, NULL,  NULL,  NULL,  NULL,  NULL,  &op98, NULL,  &op9a, NULL,  NULL,  NULL,  NULL,  NULL,
-NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &opa8, NULL,  &opaa, &opab, NULL,  NULL,  NULL,  &opaf,
-&opb0, NULL,  &opb2, NULL,  NULL,  NULL,  NULL,  NULL,  &opb8, NULL,  &opba, NULL,  NULL,  NULL,  NULL,  NULL,
-NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &opc6, NULL,  &opc8, NULL,  &opca, NULL,  NULL,  NULL,  &opce, NULL,
-&opd0, NULL,  &opd2, NULL,  NULL,  NULL,  NULL,  NULL,  &opd8, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL,
-NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &ope6, NULL,  &ope8, NULL,  &opea, NULL,  NULL,  NULL,  &opee, NULL,
-&opf0, NULL,  &opf2, NULL,  NULL,  NULL,  NULL,  NULL,  &opf8, NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL
+//  0  1      2      3      4      5      6      7      8      9      a      b      c      d      e      f
+NULL,  NULL,  &op02, NULL,  &op04, NULL,  &op06, NULL,  &op08, NULL,  &op0a, NULL,  &op0c, NULL,  &op0e, NULL, // 0
+&op10, NULL,  &op12, NULL,  &op14, NULL,  NULL,  NULL,  &op18, NULL,  NULL,  NULL,  &op1c, NULL,  NULL,  NULL, // 1
+&op20, NULL,  &op22, NULL,  &op24, &op25, NULL,  NULL,  &op28, &op29, &op2a, NULL,  &op2c, NULL,  NULL,  NULL, // 2
+&op30, NULL,  &op32, NULL,  &op34, &op35, NULL,  NULL,  &op38, NULL,  NULL,  NULL,  &op3c, NULL,  NULL,  NULL, // 3
+&op40, NULL,  &op42, NULL,  &op44, &op45, NULL,  NULL,  &op48, &op49, &op4a, NULL,  &op4c, &op4d, NULL,  NULL, // 4
+&op50, NULL,  &op52, NULL,  &op54, NULL,  NULL,  NULL,  &op58, NULL,  NULL,  NULL,  &op5c, NULL,  NULL,  NULL, // 5
+&op60, NULL,  &op62, NULL,  &op64, &op65, NULL,  NULL,  &op68, &op69, &op6a, NULL,  &op6c, NULL,  NULL,  NULL, // 6
+&op70, NULL,  &op72, NULL,  &op74, &op75, NULL,  NULL,  &op78, NULL,  NULL,  NULL,  &op7c, NULL,  NULL,  NULL, // 7
+&op80, NULL,  &op82, NULL,  &op84, NULL,  &op86, &op87, &op88, &op89, &op8a, &op8b, &op8c, NULL,  &op8e, &op8f,// 8
+&op90, NULL,  &op92, NULL,  NULL,  NULL,  NULL,  NULL,  &op98, NULL,  &op9a, NULL,  NULL,  NULL,  NULL,  NULL, // 9
+NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &opa5, &opa7, &opa8, &opa9, &opaa, &opab, NULL,  &opad, NULL,  &opaf,// a
+&opb0, NULL,  &opb2, NULL,  NULL,  NULL,  NULL,  NULL,  &opb8, NULL,  &opba, NULL,  NULL,  NULL,  NULL,  NULL, // b
+NULL,  NULL,  &opc2, NULL,  NULL,  NULL,  &opc6, NULL,  &opc8, NULL,  &opca, NULL,  NULL,  NULL,  &opce, NULL, // c
+&opd0, NULL,  &opd2, NULL,  &opd4, NULL,  NULL,  NULL,  &opd8, NULL,  NULL,  NULL,  &opdc, NULL,  NULL,  NULL, // d
+NULL,  NULL,  &ope2, NULL,  NULL,  NULL,  &ope6, NULL,  &ope8, NULL,  &opea, NULL,  NULL,  NULL,  &opee, NULL, // e
+&opf0, NULL,  &opf2, NULL,  &opf4, NULL,  NULL,  NULL,  &opf8, NULL,  NULL,  NULL,  &opfc, NULL,  NULL,  NULL  // f
 };
+#endif
+
+#ifdef WDC_65C02
+#endif
 
 void tick() {
 	if(ITC == 1) {
-		// TODO run code falling edge
+		// TODO run code cycle end
+		// possibly have to rework ITC as a table?
+		// + extensible
+		// + condenses code a lot
+		// - page bounds?
+		// - takes a long time
+		// - harder to read maybe?
+		//
+		// huh, turns out fake6502 also uses an ITC table
 		uint8_t copc = memmap[PC];
 		if(opcodes[copc] != NULL) {
 			#ifndef NOLIBC
