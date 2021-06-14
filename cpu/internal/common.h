@@ -1,3 +1,6 @@
+#ifndef __CPU_COMMON_H__
+#define __CPU_COMMON_H__
+
 #pragma GCC diagnostic ignored "-Wchar-subscripts"
 
 #ifndef NOBCD
@@ -171,3 +174,19 @@ void ldy(uint8_t dest) {
 	or_com();
 }
 
+void set_carry_for_a() {
+        if((A & 0b10000000) != 0) {
+                P |= SET_P_CARRY;
+        } else {
+                P &= MASK_P_CARRY;
+        }
+}
+
+void set_negative_for_a() {
+        if((A & 0b10000000) != 0) {
+                P |= SET_P_NEGATIVE;
+        } else {
+                P &= MASK_P_NEGATIVE;
+        }
+}
+#endif

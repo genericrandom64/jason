@@ -118,15 +118,10 @@ void op06() {
 	ITC = 6;
 
 	A = memmap[memmap[PC+1]];
-
-	if((A & 0b10000000) != 0) {
-		P |= SET_P_CARRY;
-	} else {
-		P &= MASK_P_CARRY;
-	}
-
+	set_carry_for_a();
 	A <<= 1;
 	chkzero()
+	set_negative_for_a();
 	PC+=2;
 }
 
@@ -144,15 +139,11 @@ void op09() {
 
 void op0a() {
 	ITC = 2;
-
-	if((A & 0b10000000) != 0) {
-		P |= SET_P_CARRY;
-	} else {
-		P &= MASK_P_CARRY;
-	}
-
+	//A = asl(A);
+        set_carry_for_a();
 	A <<= 1;
 	chkzero()
+	set_negative_for_a();
 	PC++;
 }
 
@@ -171,16 +162,11 @@ void op0d() {
 void op0e() {
 	ITC = 6;
 
-	A = memmap[short2addr(PC+1, PC+2)];
-
-	if((A & 0b10000000) != 0) {
-		P |= SET_P_CARRY;
-	} else {
-		P &= MASK_P_CARRY;
-	}
-
+	A = memmap[short2addr(memmap[PC+1], memmap[PC+2])];
+        set_carry_for_a();
 	A <<= 1;
 	chkzero()
+	set_negative_for_a();
 	PC+=3;
 
 }
