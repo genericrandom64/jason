@@ -233,7 +233,7 @@ void op4c() {
 void op20() {
 	// TODO i have no idea if this is right
 	stack[S--] = (uint8_t) PC+2;
-	stack[S--] = PC+2 >> 8;
+	stack[S--] = (PC+2) >> 8;
 	op4c();
 	ITC = 6;
 }
@@ -337,7 +337,8 @@ void op3c() {
 
 void op60() {
 	ITC = 6;
-	PC = (stack[S--] << 8) | stack[S--];
+	PC = (stack[S-1] << 8) | stack[S-2];
+	S -= 2;
 	PC++;
 }
 

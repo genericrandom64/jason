@@ -9,7 +9,7 @@
 CC = cc
 
 # define any compile-time flags
-CFLAGS = -Wall -ggdb3
+CFLAGS = -Wall -ggdb3 -Wchar-subscripts
 
 # define any directories containing header files other than /usr/include
 #
@@ -59,7 +59,7 @@ MAIN = $(TESTS:.c=.out)
 
 .PHONY: depend clean
 
-all:    $(MAIN)
+all:    $(SOBJS) $(MAIN)
 	@echo  All done!!
 
 $(MAIN): $(TOBJS)
@@ -73,7 +73,7 @@ $(MAIN): $(TOBJS)
 	$(CC) $(CFLAGS) $(INCLUDES) -c $<  -o $@
 
 clean:
-	$(RM) *.o *~ $(MAIN)
+	$(RM) *.o *~ $(MAIN) $(SOBJS)
 
 depend: $(SRCS)
 	makedepend $(INCLUDES) $^

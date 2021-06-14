@@ -1,3 +1,5 @@
+#pragma GCC diagnostic ignored "-Wchar-subscripts"
+
 #ifndef NOBCD
 uint8_t bcd2int(uint8_t in) {
 	uint8_t l = (in >> 4)*10, r = in & 0b00001111;
@@ -120,7 +122,7 @@ void system_request(uint8_t caller, uint8_t data) {
 	if(srqh == NULL) {
 		printf("Unhandled System Request: 0x%X 0x%X\n", caller, data);
 		// simulate jams
-		if((memmap[PC] & 00001111) == 0x2) {
+		if((memmap[PC] & 0x0F) == 0x2) {
 			// TODO we need a MCM
 			// yknow that clip from like carnival night zone? well thats what we're doing
 			printf("JAM! If there was a machine code monitor, it would be opened now.\n");
@@ -168,3 +170,4 @@ void ldy(uint8_t dest) {
 	Y = dest;
 	or_com();
 }
+
