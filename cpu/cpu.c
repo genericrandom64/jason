@@ -86,6 +86,8 @@ void copymirrors() {
 }
 */
 
+// TODO simulate open bus on unmapped addresses
+
 // TODO implement overflow, negative statuses in math ops
 // TODO check that chkzero() isnt used where not needed, if not check A = 0 at step emulator instead of opcode emulator
 // TODO do zpx/zpy take x/y signed or unsigned?
