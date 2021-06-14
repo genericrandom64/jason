@@ -35,7 +35,8 @@ TESTS = $(TEST_DIR)/flag.c \
 	$(TEST_DIR)/asl.c \
 	$(TEST_DIR)/jmp-page-bound-error.c \
 	$(TEST_DIR)/branch.c \
-	$(TEST_DIR)/sysrq.c
+	$(TEST_DIR)/sysrq.c \
+	$(TEST_DIR)/html.c
 
 # define the C object files 
 #
