@@ -1,13 +1,8 @@
-# Build j65. `make depend` is broken?
+# build tests
+make clean all
 
+# update site table
+[ "$(whoami)" = "generic" ] && tests/html.out > /tmp/opl; doas chown http:http /tmp/opl; doas -u http mv /tmp/opl /srv/http/computer/opcodes/
 cd cpu
 ./chk.sh
 cd ..
-
-# build tests
-
-## make sure to rebuild tests, just in case
-rm tests/*.o tests/*.out
-make clean
-
-make -B
