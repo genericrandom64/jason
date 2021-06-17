@@ -1,7 +1,7 @@
-#ifndef __CPU_COMMON_H__
-#define __CPU_COMMON_H__
+#ifndef CPU_COMMON_H
+#define CPU_COMMON_H
 
-#pragma GCC diagnostic ignored "-Wchar-subscripts"
+#define chkzero(V) if(V == 0) {P |= SET_P_ZERO;} else {P &= MASK_P_ZERO;}
 
 #ifndef NOBCD
 uint8_t bcd2int(uint8_t in) {
@@ -15,18 +15,24 @@ uint8_t int2bcd(uint8_t in) {
 }
 #endif
 
+void chkcarry(uint8_t i) {
+        if((i & 0b10000000) != 0) {
+                P |= SET_P_CARRY;
+        } else {
+                P &= MASK_P_CARRY;
+        }
+}
+
+void chknegative(uint8_t i) {
+        if((i & 0b10000000) != 0) {
+                P |= SET_P_NEGATIVE;
+        } else {
+                P &= MASK_P_NEGATIVE;
+        }
+}
+
 uint16_t short2addr(uint8_t lo, uint8_t hi) {
 	uint16_t addr = (uint16_t) ((hi << 8) | (uint16_t) lo);
-
-	#ifdef NES
-	// we have to mirror the wram and ppu registers, redirect reads
-	// TODO optimize this, this is quite honestly shitty
-	// wram mirrors
-	while(addr > 0x7FF && addr < 0x2000) addr -= 0x800;
-	// PPU reg mirrors
-	while(addr > 0x2007 && addr < 0x4000) addr -= 8;
-	#endif
-
 	return addr;
 }
 
@@ -35,24 +41,20 @@ void lax(uint8_t i) {
 	X = i;
 }
 
-void or_com() {
-	if((A & 0b10000000) != 0) {
-		P |= SET_P_NEGATIVE;
-	} else {
-		P &= MASK_P_NEGATIVE;
-	}
-	chkzero()
+void or_com(uint8_t i) {
+	chknegative(i);
+	chkzero(i);
 }
 
 void xor(uint8_t x) {
 	// TODO is this correct?
 	A ^= x;
-	or_com();
+	or_com(A);
 }
 
 void or(uint8_t o) {
 	A |= o;
-	or_com();
+	or_com(A);
 }
 
 void adc8(uint8_t src, uint8_t *addreg) {
@@ -92,7 +94,7 @@ void adc8(uint8_t src, uint8_t *addreg) {
 	#endif
 	// TODO is the result stored to A?
 	A = res8;
-	chkzero()
+	chkzero(A);
 	// TODO make sure cmp works
 	if(cmpval != res8) P |= SET_P_OVERFLOW;
 	// TODO THIS DOES NOT WORK. cannot believe i missed this because it breaks absolute address opcodes
@@ -123,12 +125,18 @@ void bit(uint8_t src) {
 
 void system_request(uint8_t caller, uint8_t data) {
 	if(srqh == NULL) {
+		#ifndef NOLIBC
 		printf("Unhandled System Request: 0x%X 0x%X\n", caller, data);
+		#endif
+		// TODO give greater indication to program that processor has jammed
+		// as it is, jams just don't change the PC, but in the future they should do more
 		// simulate jams
 		if((memmap[PC] & 0x0F) == 0x2) {
 			// TODO we need a MCM
 			// yknow that clip from like carnival night zone? well thats what we're doing
+			#ifndef NOLIBC
 			printf("JAM! If there was a machine code monitor, it would be opened now.\n");
+			#endif
 		}
 	}
 	else (*srqh)(caller, data);
@@ -161,32 +169,28 @@ uint8_t zpz(uint8_t base, uint8_t index) {
 
 void lda(uint8_t dest) {
 	A = dest;
-	or_com();
+	or_com(A);
 }
 
 void ldx(uint8_t dest) {
 	X = dest;
-	or_com();
+	or_com(X);
 }
 
 void ldy(uint8_t dest) {
 	Y = dest;
-	or_com();
+	or_com(Y);
 }
 
-void set_carry_for_a() {
-        if((A & 0b10000000) != 0) {
-                P |= SET_P_CARRY;
-        } else {
-                P &= MASK_P_CARRY;
-        }
+void asl(uint8_t i) {
+	A = i;
+	chkcarry(A);
+	A<<=1;
+	or_com(A);
 }
 
-void set_negative_for_a() {
-        if((A & 0b10000000) != 0) {
-                P |= SET_P_NEGATIVE;
-        } else {
-                P &= MASK_P_NEGATIVE;
-        }
+void and(uint8_t i) {
+	A&=i;
+	or_com(A);
 }
 #endif

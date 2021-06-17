@@ -20,13 +20,12 @@
  * Public-domain software
  */
 
-// TODO remove UOP in favor of WDC_65C02 opcode map
+// TODO might have added pagebound ITCs where unnecessary? check *9 and *D
 #define NMOS_6502
 #include "cpu.h"
 
 #ifdef NES
-// 2A03 does not support BCD
-#define NOBCD
+#define NOBCD // 2A03 does not support BCD
 #endif
 
 /* ADDR		TYPE
@@ -44,53 +43,34 @@
  * 4020h-FFFFh	All cartridge memory (ROM, SRAM, etc)
  */
 
-// TODO make more stuff into their own functions to cut down on code size
-// TODO functions missing zero/negative checks
-
 uint16_t PC;
-uint8_t	S, A, X, Y, P, ITC;
-char
 	#ifdef NES
-	vram[2048],	// 2kb of video ram
-	oam[256],	// sprite data
-	palette[28],	// on the ppu chip
+char	vram[2048],
+	oam[256],
+	palette[28];
 	#endif
-	memmap[0xFFFF],	// system memory
-	// TODO the stack funcs are probably wrong, or this is; i have low confidence in
-	// the accuracy of the stack code considering the length of time it was written in
-	*stack = memmap+0x1FF;
+uint8_t	S = 255,
+	A,
+	X,
+	Y,
+	P,
+	ITC,
+	memmap[0xFFFF],
+	*stack = memmap+0x100;	// TODO the stack funcs are wrong
 
 void (*srqh)(uint8_t a, uint8_t b) = NULL;
 
 #include "internal/common.h"
 
-// TODO page wrap might be wrong?
-// http://6502.org/tutorials/65c816opcodes.html#APPENDIX:
-// 5.1.1 seems to indicate problems in pages.
-
 // TODO does the 65c02 have different cycle times?
 // TODO use some damn pointers
-
 // TODO 2 stage pipeline?
 // https://retrocomputing.stackexchange.com/questions/5369/how-does-the-6502-implement-its-branch-instructions
-
-// see below comment
-//uint8_t pregupdmap[1024], wramupdmap[4];
-
-/*
-// TODO instructions should automatically do this if the absolute address is within one of these regions. in fact, this doesn't even work because it clears writes inside the mirrors
-void copymirrors() {
-	// Copy WRAM
-	for(uint8_t i = 1; i < 4; i++) memcpy(memmap, (memmap+(0x800*i)), 0x800);
-	// Copy PPU registers
-}
-*/
-
 // TODO simulate open bus on unmapped addresses
-
+// TODO formulate a not-too-hacky way of simulating mirrored memory
 // TODO implement overflow, negative statuses in math ops
-// TODO check that chkzero() isnt used where not needed, if not check A = 0 at step emulator instead of opcode emulator
-// TODO do zpx/zpy take x/y signed or unsigned?
+// TODO check that chkzero is used where needed
+// TODO functions missing zero/negative checks
 
 
 void op02() {
@@ -116,12 +96,7 @@ void op05() {
 
 void op06() {
 	ITC = 6;
-
-	A = memmap[memmap[PC+1]];
-	set_carry_for_a();
-	A <<= 1;
-	chkzero()
-	set_negative_for_a();
+	asl(memmap[memmap[PC+1]]);
 	PC+=2;
 }
 
@@ -139,11 +114,7 @@ void op09() {
 
 void op0a() {
 	ITC = 2;
-	//A = asl(A);
-        set_carry_for_a();
-	A <<= 1;
-	chkzero()
-	set_negative_for_a();
+	asl(A);
 	PC++;
 }
 
@@ -161,12 +132,7 @@ void op0d() {
 
 void op0e() {
 	ITC = 6;
-
-	A = memmap[short2addr(memmap[PC+1], memmap[PC+2])];
-        set_carry_for_a();
-	A <<= 1;
-	chkzero()
-	set_negative_for_a();
+	asl(memmap[short2addr(memmap[PC+1], memmap[PC+2])]);
 	PC+=3;
 
 }
@@ -211,6 +177,12 @@ void op1c() {
 	PC+=3;
 }
 
+void op1e() {
+	ITC = 7;
+	asl(memmap[(uint16_t)X+short2addr(memmap[PC+1], memmap[PC+2])]);
+	PC+=3;
+}
+
 void op4c() {
 	ITC = 3;
 	PC = short2addr(memmap[PC+1], memmap[PC+2]);
@@ -237,7 +209,7 @@ void op24() {
 void op25() {
 	ITC = 3;
 	A &= memmap[memmap[PC+1]];
-	chkzero()
+	chkzero(A)
 	PC+=2;
 }
 
@@ -250,7 +222,7 @@ void op28() {
 void op29() {
 	ITC = 2;
 	A &= memmap[PC+1];
-	chkzero()
+	chkzero(A)
 	PC+=2;
 }
 
@@ -260,16 +232,12 @@ void op2a() {
 
 	uint8_t tmp = P & SET_P_CARRY;
 
-	if((A & 0b10000000) != 0) {
-		P |= SET_P_CARRY;
-	} else {
-		P &= MASK_P_CARRY;
-	}
+	chkcarry(A);
 
 	A <<= 1;
 
 	if(tmp != 0) A |= 1;
-	chkzero()
+	chkzero(A)
 
 	PC++;
 
@@ -300,7 +268,7 @@ void op34() {
 void op35() {
 	ITC = 4;
 	A = memmap[memmap[PC+1]] & X;
-	chkzero()
+	chkzero(A)
 	PC+=2;
 }
 
@@ -308,6 +276,14 @@ void op38() {
 	ITC = 2;
 	P |= SET_P_CARRY;
 	PC++;
+}
+
+void op39() {
+	ITC = 4;
+	// TODO right PC+i for cycle?
+	if(new_page(PC+1, (uint16_t)Y+short2addr(memmap[PC+1], memmap[PC+2])) == 1) ITC++;
+	and(memmap[(uint16_t)Y+short2addr(memmap[PC+1], memmap[PC+2])]);
+	PC+=3;
 }
 
 void op3a() {
@@ -318,6 +294,14 @@ void op3c() {
 	ITC = 4;
 	uint16_t addr = short2addr(memmap[PC+1], memmap[PC+2]), addrx = addr+X;
 	if(new_page(addr, addrx) == 1) ITC++;
+	PC+=3;
+}
+
+void op3d() {
+	ITC = 4;
+	// TODO right PC+i for cycle?
+	if(new_page(PC+1, (uint16_t)X+short2addr(memmap[PC+1], memmap[PC+2])) == 1) ITC++;
+	and(memmap[(uint16_t)X+short2addr(memmap[PC+1], memmap[PC+2])]);
 	PC+=3;
 }
 
@@ -375,7 +359,7 @@ void op4a() {
 	}
 
 	A >>= 1;
-	chkzero()
+	chkzero(A)
 	PC++;
 }
 
@@ -413,6 +397,13 @@ void op58() {
 	PC++;
 }
 
+void op59() {
+	ITC = 4;
+	if(new_page(PC+1, (uint16_t)Y+short2addr(memmap[PC+1], memmap[PC+2])) == 1) ITC++;
+	xor(memmap[(uint16_t)Y+short2addr(memmap[PC+1], memmap[PC+2])]);
+	PC+=3;
+}
+
 void op5a() {
 	opea();
 }
@@ -421,6 +412,13 @@ void op5c() {
 	ITC = 4;
 	uint16_t addr = short2addr(memmap[PC+1], memmap[PC+2]), addrx = addr+X;
 	if(new_page(addr, addrx) == 1) ITC++;
+	PC+=3;
+}
+
+void op5d() {
+	ITC = 4;
+	if(new_page(PC+1, (uint16_t)X+short2addr(memmap[PC+1], memmap[PC+2])) == 1) ITC++;
+	xor(memmap[(uint16_t)X+short2addr(memmap[PC+1], memmap[PC+2])]);
 	PC+=3;
 }
 
@@ -437,7 +435,7 @@ void op64() {
 void op68() {
 	ITC = 4;
 	A = stack[S++];
-	chkzero()
+	chkzero(A)
 	PC++;
 }
 
@@ -466,7 +464,7 @@ void op6a() {
 	A >>= 1;
 
 	if(tmp != 0) A |= 1 << 7;
-	chkzero()
+	chkzero(A)
 
 	PC++;
 
@@ -552,11 +550,7 @@ void op87() {
 void op88() {
 	ITC = 2;
 	Y--;
-	if((Y & 0b10000000) != 0) {
-		P |= SET_P_NEGATIVE;
-	} else {
-		P &= MASK_P_NEGATIVE;
-	}
+	chknegative(Y);
 	PC++;
 }
 
@@ -568,12 +562,8 @@ void op89() {
 void op8a() {
 	ITC = 2;
 	A = X;
-	if((A & 0b10000000) != 0) {
-		P |= SET_P_NEGATIVE;
-	} else {
-		P &= MASK_P_NEGATIVE;
-	}
-	chkzero()
+	chknegative(A);
+	chkzero(A)
 	PC++;
 }
 
@@ -633,12 +623,8 @@ void op96() {
 void op98() {
 	ITC = 2;
 	A = Y;
-	chkzero()
-	if((A & 0b10000000) != 0) {
-		P |= SET_P_NEGATIVE;
-	} else {
-		P &= MASK_P_NEGATIVE;
-	}
+	chkzero(A)
+	chknegative(A);
 	PC++;
 }
 
@@ -663,12 +649,8 @@ void opa7() {
 void opa8() {
 	ITC = 2;
 	Y = A;
-	if((Y & 0b10000000) != 0) {
-		P |= SET_P_NEGATIVE;
-	} else {
-		P &= MASK_P_NEGATIVE;
-	}
-	chkzeroy()
+	chknegative(Y);
+	chkzero(Y)
 	PC++;
 }
 
@@ -681,12 +663,8 @@ void opa9() {
 void opaa() {
 	ITC = 2;
 	X = A;
-	if((X & 0b10000000) != 0) {
-		P |= SET_P_NEGATIVE;
-	} else {
-		P &= MASK_P_NEGATIVE;
-	}
-	chkzerox()
+	chknegative(X);
+	chkzero(X)
 	PC++;
 }
 
@@ -707,12 +685,8 @@ void opad() {
 void opaf() {
 	A = memmap[short2addr(PC+1, PC+2)];
 	X = A;
-	if((X & 0b10000000) != 0) {
-		P |= SET_P_NEGATIVE;
-	} else {
-		P &= MASK_P_NEGATIVE;
-	}
-	chkzerox()
+	chknegative(X);
+	chkzero(X)
 	ITC = 4;
 	PC+=3;
 }
@@ -751,16 +725,52 @@ void opb8() {
 	PC++;
 }
 
+void opb9() {
+	ITC = 4;
+	if(new_page(PC+1, memmap[(uint16_t)Y+short2addr(memmap[PC+1], memmap[PC+2])]) == 1) ITC++;
+	A = memmap[(uint16_t)Y+short2addr(memmap[PC+1], memmap[PC+2])];
+	chknegative(A);
+	chkzero(A)
+	PC+=3;
+}
+
 void opba() {
 	ITC = 2;
 	X = S;
-	if((X & 0b10000000) != 0) {
-		P |= SET_P_NEGATIVE;
-	} else {
-		P &= MASK_P_NEGATIVE;
-	}
-	chkzerox()
+	chknegative(X);
+	chkzero(X)
 	PC++;
+}
+
+void opbc() {
+	ITC = 4;
+	if(new_page(PC+1, memmap[(uint16_t)X+short2addr(memmap[PC+1], memmap[PC+2])]) == 1) ITC++;
+	Y = memmap[(uint16_t)X+short2addr(memmap[PC+1], memmap[PC+2])];
+	chknegative(Y);
+	chkzero(Y)
+	PC+=3;
+}
+
+void opbd() {
+	ITC = 4;
+	if(new_page(PC+1, memmap[(uint16_t)X+short2addr(memmap[PC+1], memmap[PC+2])]) == 1) ITC++;
+	lda(memmap[(uint16_t)X+short2addr(memmap[PC+1], memmap[PC+2])]);
+	PC+=3;
+}
+
+void opbe() {
+	ITC = 4;
+	if(new_page(PC+1, memmap[(uint16_t)Y+short2addr(memmap[PC+1], memmap[PC+2])]) == 1) ITC++;
+	ldx(memmap[(uint16_t)Y+short2addr(memmap[PC+1], memmap[PC+2])]);
+	PC+=3;
+}
+
+void opbf() {
+	ITC = 4;
+	if(new_page(PC+1, memmap[(uint16_t)Y+short2addr(memmap[PC+1], memmap[PC+2])]) == 1) ITC++;
+	lda(memmap[(uint16_t)Y+short2addr(memmap[PC+1], memmap[PC+2])]);
+	ldx(memmap[(uint16_t)Y+short2addr(memmap[PC+1], memmap[PC+2])]);
+	PC+=3;
 }
 
 void opc2() {
@@ -770,14 +780,10 @@ void opc2() {
 
 void opc6() {
 	ITC = 5;
-	uint8_t tmp = memmap[PC+1];
+	uint8_t tmp = memmap[memmap[PC+1]];
 	tmp--;
-	memmap[PC+1]--;
-	if((tmp & 0b10000000) != 0) {
-		P |= SET_P_NEGATIVE;
-	} else {
-		P &= MASK_P_NEGATIVE;
-	}
+	memmap[memmap[PC+1]]--;
+	chknegative(tmp);
 	if(tmp == 0) {P |= SET_P_ZERO;} else {P &= MASK_P_ZERO;}
 	PC+=2;
 }
@@ -785,22 +791,14 @@ void opc6() {
 void opc8() {
 	ITC = 2;
 	Y++;
-	if((Y & 0b10000000) != 0) {
-		P |= SET_P_NEGATIVE;
-	} else {
-		P &= MASK_P_NEGATIVE;
-	}
+	chknegative(Y);
 	PC++;
 }
 
 void opca() {
 	ITC = 2;
 	X--;
-	if((X & 0b10000000) != 0) {
-		P |= SET_P_NEGATIVE;
-	} else {
-		P &= MASK_P_NEGATIVE;
-	}
+	chknegative(X);
 	PC++;
 }
 
@@ -809,11 +807,7 @@ void opce() {
 	uint8_t tmp = memmap[short2addr(PC+1, PC+2)];
 	tmp--;
 	memmap[short2addr(PC+1, PC+2)]--;
-	if((tmp & 0b10000000) != 0) {
-		P |= SET_P_NEGATIVE;
-	} else {
-		P &= MASK_P_NEGATIVE;
-	}
+	chknegative(tmp);
 	if(tmp == 0) {P |= SET_P_ZERO;} else {P &= MASK_P_ZERO;}
 	PC+=3;
 }
@@ -851,6 +845,15 @@ void opdc() {
 	PC+=3;
 }
 
+void opde() {
+	ITC = 7;
+	memmap[short2addr(memmap[PC+1], memmap[PC+2])+X]--;
+	uint8_t tmp = memmap[short2addr(memmap[PC+1], memmap[PC+2])+X];
+	if(tmp == 0) {P |= SET_P_ZERO;} else {P &= MASK_P_ZERO;}
+	chknegative(tmp);
+	PC+=3;
+}
+
 void ope2() {
 	opea();
 	PC++;
@@ -861,11 +864,7 @@ void ope6() {
 	uint8_t tmp = memmap[PC+1];
 	tmp++;
 	memmap[PC+1]++;
-	if((tmp & 0b10000000) != 0) {
-		P |= SET_P_NEGATIVE;
-	} else {
-		P &= MASK_P_NEGATIVE;
-	}
+	chknegative(tmp);
 	if(tmp == 0) {P |= SET_P_ZERO;} else {P &= MASK_P_ZERO;}
 	PC+=2;
 }
@@ -873,20 +872,16 @@ void ope6() {
 void ope8() {
 	ITC = 2;
 	X++;
-	if((X & 0b10000000) != 0) {
-		P |= SET_P_NEGATIVE;
-	} else {
-		P &= MASK_P_NEGATIVE;
-	}
-
+	chknegative(X);
 	PC++;
 }
 
 void opee() {
 	ITC = 6;
-	uint8_t tmp = memmap[short2addr(PC+1, PC+2)] + 1;
-	memmap[short2addr(PC+1, PC+2)] = tmp;
-	if((tmp & 0b10000000) != 0) {P |= SET_P_NEGATIVE;} else {P &= MASK_P_NEGATIVE;}
+	// TODO 90% sure something here is wrong
+	uint8_t tmp = memmap[short2addr(memmap[PC+1], memmap[PC+2])] + 1;
+	memmap[short2addr(memmap[PC+1], memmap[PC+2])] = tmp;
+	chknegative(tmp);
 	if(tmp == 0) {P |= SET_P_ZERO;} else {P &= MASK_P_ZERO;}
 	PC+=3;
 }
@@ -924,27 +919,36 @@ void opfc() {
 	PC+=3;
 }
 
+void opfe() {
+	ITC = 7;
+	memmap[short2addr(memmap[PC+1], memmap[PC+2])+X]++;
+	uint8_t tmp = memmap[short2addr(memmap[PC+1], memmap[PC+2])+X];
+	if(tmp == 0) {P |= SET_P_ZERO;} else {P &= MASK_P_ZERO;}
+	chknegative(tmp);
+	PC+=3;
+}
+
 #ifdef NMOS_6502
 #undef WDC_65C02
 // opcode map for tick() to use
 function_pointer_array opcodes[] = {
 //  0  1      2      3      4      5      6      7      8      9      a      b      c      d      e      f
 NULL,  NULL,  &op02, NULL,  &op04, &op05, &op06, NULL,  &op08, &op09, &op0a, NULL,  &op0c, &op0d, &op0e, NULL, // 0
-&op10, NULL,  &op12, NULL,  &op14, &op15, NULL,  NULL,  &op18, NULL,  NULL,  NULL,  &op1c, NULL,  NULL,  NULL, // 1
+&op10, NULL,  &op12, NULL,  &op14, &op15, NULL,  NULL,  &op18, NULL,  NULL,  NULL,  &op1c, NULL,  &op1e, NULL, // 1
 &op20, NULL,  &op22, NULL,  &op24, &op25, NULL,  NULL,  &op28, &op29, &op2a, NULL,  &op2c, NULL,  NULL,  NULL, // 2
-&op30, NULL,  &op32, NULL,  &op34, &op35, NULL,  NULL,  &op38, NULL,  NULL,  NULL,  &op3c, NULL,  NULL,  NULL, // 3
+&op30, NULL,  &op32, NULL,  &op34, &op35, NULL,  NULL,  &op38, &op39, NULL,  NULL,  &op3c, &op3d, NULL,  NULL, // 3
 &op40, NULL,  &op42, NULL,  &op44, &op45, NULL,  NULL,  &op48, &op49, &op4a, NULL,  &op4c, &op4d, NULL,  NULL, // 4
-&op50, NULL,  &op52, NULL,  &op54, &op55, NULL,  NULL,  &op58, NULL,  NULL,  NULL,  &op5c, NULL,  NULL,  NULL, // 5
+&op50, NULL,  &op52, NULL,  &op54, &op55, NULL,  NULL,  &op58, &op59, NULL,  NULL,  &op5c, &op5d, NULL,  NULL, // 5
 &op60, NULL,  &op62, NULL,  &op64, &op65, NULL,  NULL,  &op68, &op69, &op6a, NULL,  &op6c, NULL,  NULL,  NULL, // 6
 &op70, NULL,  &op72, NULL,  &op74, &op75, NULL,  NULL,  &op78, NULL,  NULL,  NULL,  &op7c, NULL,  NULL,  NULL, // 7
 &op80, NULL,  &op82, NULL,  &op84, NULL,  &op86, &op87, &op88, &op89, &op8a, &op8b, &op8c, NULL,  &op8e, &op8f,// 8
 &op90, NULL,  &op92, NULL,  &op94, &op95, &op96, NULL,  &op98, NULL,  &op9a, NULL,  NULL,  NULL,  NULL,  NULL, // 9
 NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &opa5, &opa7, &opa8, &opa9, &opaa, &opab, NULL,  &opad, NULL,  &opaf,// a
-&opb0, NULL,  &opb2, NULL,  &opb4, NULL,  &opb5, &opb6, &opb8, NULL,  &opba, NULL,  NULL,  NULL,  NULL,  NULL, // b
+&opb0, NULL,  &opb2, NULL,  &opb4, NULL,  &opb5, &opb6, &opb8, &opb9, &opba, NULL,  &opbc, &opbd, &opbe, &opbf,// b
 NULL,  NULL,  &opc2, NULL,  NULL,  NULL,  &opc6, NULL,  &opc8, NULL,  &opca, NULL,  NULL,  NULL,  &opce, NULL, // c
-&opd0, NULL,  &opd2, NULL,  &opd4, NULL,  NULL,  NULL,  &opd8, NULL,  NULL,  NULL,  &opdc, NULL,  NULL,  NULL, // d
+&opd0, NULL,  &opd2, NULL,  &opd4, NULL,  NULL,  NULL,  &opd8, NULL,  NULL,  NULL,  &opdc, NULL,  &opde, NULL, // d
 NULL,  NULL,  &ope2, NULL,  NULL,  NULL,  &ope6, NULL,  &ope8, NULL,  &opea, NULL,  NULL,  NULL,  &opee, NULL, // e
-&opf0, NULL,  &opf2, NULL,  &opf4, NULL,  NULL,  NULL,  &opf8, NULL,  NULL,  NULL,  &opfc, NULL,  NULL,  NULL  // f
+&opf0, NULL,  &opf2, NULL,  &opf4, NULL,  NULL,  NULL,  &opf8, NULL,  NULL,  NULL,  &opfc, NULL,  &opfe, NULL  // f
 };
 #endif
 

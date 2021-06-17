@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <stddef.h>
 
 // No libc functions
 //#define NOLIBC
@@ -10,7 +11,7 @@
 //#define NES
 
 #ifdef NOLIBC
-#warning While j6502 is mostly not reliant on libc, it requires working implementations of:
+#warning While j65 is mostly not reliant on libc, it requires working implementations of:
 #warning memcpy.
 #warning You will have to provide the above functions or patch the code.
 #else
@@ -30,26 +31,23 @@ extern uint8_t	S,	// stack pointer
 	ITC;		// instruction timer to waste cycles until the instruction is supposed to be done
 
 // MEMORY
-
+#ifdef NES
 extern char	vram[2048],	// 2kb of video ram
-	oam[256],	// sprite data
-	palette[28],	// on the ppu chip
+		oam[256],	// sprite data
+		palette[28];	// on the ppu chip
+#endif
+extern uint8_t
 	memmap[0xFFFF],	// system memory
-// TODO might be wrong
-*stack;	// convenience pointer for the stack on page 1
+	*stack;	// convenience pointer for the stack on page 1
 
 // PROGRAM DEFINES AND FUNCTION PROTOTYPES
 
 #define UOP // We want undefined opcodes
-#define NOBCD // TODO we do *not* want decimal mode in an NES emulator
-
-#define chkzero() if(A == 0) {P |= SET_P_ZERO;} else {P &= MASK_P_ZERO;}
-#define chkzerox() if(X == 0) {P |= SET_P_ZERO;} else {P &= MASK_P_ZERO;}
-#define chkzeroy() if(Y == 0) {P |= SET_P_ZERO;} else {P &= MASK_P_ZERO;}
-#define UOPMSG "UNOFFICIAL OPCODE: 0x%X. It will be treated as a NOP. Problems *will* occur."
+#define NOBCD // we do *not* want decimal mode in an NES emulator
 
 typedef void(*function_pointer_array)();
 
+#ifdef NES
 // MEMORY MAPPED REGISTERS
 // https://wiki.nesdev.com/w/index.php/2A03
 
@@ -85,6 +83,7 @@ typedef void(*function_pointer_array)();
 
 #define JOY1 0x4016
 #define JOY2 0x4017
+#endif
 
 // STATUS FLAGS
 #define SET_P_CARRY	1 << 0
