@@ -1,7 +1,7 @@
 #ifndef CPU_COMMON_H
 #define CPU_COMMON_H
 
-#define chkzero(V) if(V == 0) {P |= SET_P_ZERO;} else {P &= MASK_P_ZERO;}
+#define chkzero(cpu, V) if(V == 0) {cpu->P |= SET_P_ZERO;} else {cpu->P &= MASK_P_ZERO;}
 
 #ifndef NOBCD
 uint8_t bcd2int(uint8_t in) {
@@ -15,19 +15,19 @@ uint8_t int2bcd(uint8_t in) {
 }
 #endif
 
-void chkcarry(uint8_t i) {
+void chkcarry(j65_t* cpu, uint8_t i) {
         if((i & 0b10000000) != 0) {
-                P |= SET_P_CARRY;
+                cpu->P |= SET_P_CARRY;
         } else {
-                P &= MASK_P_CARRY;
+                cpu->P &= MASK_P_CARRY;
         }
 }
 
-void chknegative(uint8_t i) {
+void chknegative(j65_t* cpu, uint8_t i) {
         if((i & 0b10000000) != 0) {
-                P |= SET_P_NEGATIVE;
+                cpu->P |= SET_P_NEGATIVE;
         } else {
-                P &= MASK_P_NEGATIVE;
+                cpu->P &= MASK_P_NEGATIVE;
         }
 }
 
@@ -36,44 +36,44 @@ uint16_t short2addr(uint8_t lo, uint8_t hi) {
 	return addr;
 }
 
-void lax(uint8_t i) {
-	A = i;
-	X = i;
+void lax(j65_t* cpu, uint8_t i) {
+	cpu->A = i;
+	cpu->X = i;
 }
 
-void or_com(uint8_t i) {
-	chknegative(i);
-	chkzero(i);
+void or_com(j65_t* cpu, uint8_t i) {
+	chknegative(cpu, i);
+	chkzero(cpu, i);
 }
 
-void xor(uint8_t x) {
+void xor(j65_t* cpu, uint8_t x) {
 	// TODO is this correct?
-	A ^= x;
-	or_com(A);
+	cpu->A ^= x;
+	or_com(cpu, cpu->A);
 }
 
-void or(uint8_t o) {
-	A |= o;
-	or_com(A);
+void or(j65_t* cpu, uint8_t o) {
+	cpu->A |= o;
+	or_com(cpu, cpu->A);
 }
 
-void adc8(uint8_t src, uint8_t *addreg) {
+void adc8(j65_t* cpu, uint8_t src, uint8_t *addreg) {
 	// TODO sign this and set overflow accordingly
 	// DO you sign this? i hate addition and subtraction now
 	uint16_t res = 0;
 	int cmpval = 0;
 	int8_t res8 = 0;
 	#ifndef NOBCD
-	if((P & SET_P_DECIMAL) != 0)
+	if((cpu->P & SET_P_DECIMAL) != 0)
 	#endif
 	{
-		res = *addreg + memmap[PC+1];
-		cmpval = *addreg + memmap[PC+1];
+		res = *addreg + cpu->memmap[cpu->PC+1];
+		cmpval = *addreg + cpu->memmap[cpu->PC+1];
 		res8 = res & 0b0000000011111111;
 		if((res & 0b0000000100000000) != 0) {
-			P |= SET_P_CARRY;
+			cpu->P |= SET_P_CARRY;
 		} else {
-			P &= MASK_P_CARRY;
+			cpu->P &= MASK_P_CARRY;
 		}
 	}
 	#ifndef NOBCD
@@ -85,45 +85,45 @@ void adc8(uint8_t src, uint8_t *addreg) {
 		res8 = res & 0b0000000011111111;
 		// TODO set carry correctly
 		if((res & 0b0000000100000000) != 0) {
-			P |= SET_P_CARRY;
+			cpu->P |= SET_P_CARRY;
 		} else {
-			P &= MASK_P_CARRY;
+			cpu->P &= MASK_P_CARRY;
 		}
 		res8 = int2bcd(res8);
 	}
 	#endif
 	// TODO is the result stored to A?
-	A = res8;
-	chkzero(A);
+	cpu->A = res8;
+	chkzero(cpu, cpu->A);
 	// TODO make sure cmp works
-	if(cmpval != res8) P |= SET_P_OVERFLOW;
+	if(cmpval != res8) cpu->P |= SET_P_OVERFLOW;
 	// TODO THIS DOES NOT WORK. cannot believe i missed this because it breaks absolute address opcodes
-	PC+=2;
+	cpu->PC+=2;
 }
 
-void bit(uint8_t src) {
+void bit(j65_t* cpu, uint8_t src) {
 	if((src & 0b01000000) != 0) {
-		P |= SET_P_OVERFLOW;
+		cpu->P |= SET_P_OVERFLOW;
 	} else {
-		P &= MASK_P_OVERFLOW;
+		cpu->P &= MASK_P_OVERFLOW;
 	} // bit 6
 
 	if((src & 0b10000000) != 0) {
-		P |= SET_P_NEGATIVE;
+		cpu->P |= SET_P_NEGATIVE;
 	} else {
-		P &= MASK_P_NEGATIVE;
+		cpu->P &= MASK_P_NEGATIVE;
 	} // bit 7
 	// TODO is this ANDed correctly?
 	// no? check
-	if((src & A) == 0) {
-		P |= SET_P_ZERO;
+	if((src & cpu->A) == 0) {
+		cpu->P |= SET_P_ZERO;
 	} else {
-		P &= MASK_P_ZERO;
+		cpu->P &= MASK_P_ZERO;
 	} // accumulator mask
 
 }
 
-void system_request(uint8_t caller, uint8_t data) {
+void system_request(j65_t* cpu, uint8_t caller, uint8_t data) {
 	if(srqh == NULL) {
 		#ifndef NOLIBC
 		printf("Unhandled System Request: 0x%X 0x%X\n", caller, data);
@@ -131,7 +131,7 @@ void system_request(uint8_t caller, uint8_t data) {
 		// TODO give greater indication to program that processor has jammed
 		// as it is, jams just don't change the PC, but in the future they should do more
 		// simulate jams
-		if((memmap[PC] & 0x0F) == 0x2) {
+		if((cpu->memmap[cpu->PC] & 0x0F) == 0x2) {
 			// TODO we need a MCM
 			// yknow that clip from like carnival night zone? well thats what we're doing
 			#ifndef NOLIBC
@@ -151,13 +151,13 @@ uint8_t new_page(int addr1, int addr2) {
 	return 0;
 }
 
-void branch() {
-	ITC++;
-	PC++;
+void branch(j65_t* cpu) {
+	cpu->ITC++;
+	cpu->PC++;
 	// TODO will this work on a page bound ( DO | 01)?
-	if(new_page(PC-1, PC+(int8_t)memmap[PC])) ITC++;
-	PC+=(int8_t)memmap[PC];
-	PC++;
+	if(new_page(cpu->PC-1, cpu->PC+(int8_t)cpu->memmap[cpu->PC])) cpu->ITC++;
+	cpu->PC+=(int8_t)cpu->memmap[cpu->PC];
+	cpu->PC++;
 }
 
 uint8_t zpz(uint8_t base, uint8_t index) {
@@ -167,30 +167,30 @@ uint8_t zpz(uint8_t base, uint8_t index) {
 	return base + index;
 }
 
-void lda(uint8_t dest) {
-	A = dest;
-	or_com(A);
+void lda(j65_t* cpu, uint8_t dest) {
+	cpu->A = dest;
+	or_com(cpu, cpu->A);
 }
 
-void ldx(uint8_t dest) {
-	X = dest;
-	or_com(X);
+void ldx(j65_t* cpu, uint8_t dest) {
+	cpu->X = dest;
+	or_com(cpu, cpu->X);
 }
 
-void ldy(uint8_t dest) {
-	Y = dest;
-	or_com(Y);
+void ldy(j65_t* cpu, uint8_t dest) {
+	cpu->Y = dest;
+	or_com(cpu, cpu->Y);
 }
 
-void asl(uint8_t i) {
-	A = i;
-	chkcarry(A);
-	A<<=1;
-	or_com(A);
+void asl(j65_t* cpu, uint8_t i) {
+	cpu->A = i;
+	chkcarry(cpu, cpu->A);
+	cpu->A<<=1;
+	or_com(cpu, cpu->A);
 }
 
-void and(uint8_t i) {
-	A&=i;
-	or_com(A);
+void and(j65_t* cpu, uint8_t i) {
+	cpu->A&=i;
+	or_com(cpu, cpu->A);
 }
 #endif

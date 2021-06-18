@@ -10,21 +10,23 @@ void syshandle(uint8_t caller, uint8_t data) {
 }
 
 int main() {
-	PC = 0;
-	ITC = 1;
+	j65_t cpu;
+	j65_init(&cpu);
+	cpu.PC = 0;
+	cpu.ITC = 1;
 	for(uint16_t i; i < 0xFFFF; i++) {
-		memmap[i] = 0x75;
+		cpu.memmap[i] = 0x75;
 	}
 	register_system_request(syshandle);
-	memmap[0] = 0x8B;
-	memmap[1] = 12;
-	memmap[2] = 0xAB;
-	memmap[3] = 13;
-	memmap[4] = 0x4C;
-	memmap[5] = 0;
-	memmap[6] = 0;
+	cpu.memmap[0] = 0x8B;
+	cpu.memmap[1] = 12;
+	cpu.memmap[2] = 0xAB;
+	cpu.memmap[3] = 13;
+	cpu.memmap[4] = 0x4C;
+	cpu.memmap[5] = 0;
+	cpu.memmap[6] = 0;
 	for(unsigned int i = 0; i < 0x200; i++) {
-		tick();
+		tick(&cpu);
 	}
 	assert(i == 3200);
 	printf("SYSRQ test passed.\n");

@@ -3,24 +3,26 @@
 #include <assert.h>
 
 int main() {
+	j65_t cpu;
+	j65_init(&cpu);
 	// test 6502 jmp bug
-	PC = 0;
-	ITC = 1;
+	cpu.PC = 0;
+	cpu.ITC = 1;
 	for(uint16_t i; i < 0xFFFF; i++) {
-		memmap[i] = 0x75;
+		cpu.memmap[i] = 0x75;
 	}
-	memmap[0] = 0x6C;
-	memmap[1] = 0xFF;
-	memmap[2] = 0x30;
-	memmap[0x3000] = 0x40;
-	memmap[0x3100] = 0x50;
-	memmap[0x30FF] = 0x80;
-	memmap[0x4080] = 0x4c;
-	memmap[0x4081] = 0;
-	memmap[0x4082] = 0;
-	tick();
-	printf("PC %X\n", PC);
-	assert(PC == 0x4080);
+	cpu.memmap[0] = 0x6C;
+	cpu.memmap[1] = 0xFF;
+	cpu.memmap[2] = 0x30;
+	cpu.memmap[0x3000] = 0x40;
+	cpu.memmap[0x3100] = 0x50;
+	cpu.memmap[0x30FF] = 0x80;
+	cpu.memmap[0x4080] = 0x4c;
+	cpu.memmap[0x4081] = 0;
+	cpu.memmap[0x4082] = 0;
+	tick(&cpu);
+	printf("PC %X\n", cpu.PC);
+	assert(cpu.PC == 0x4080);
 	printf("JMP on page boundary failed successfully.\n");
 
 }

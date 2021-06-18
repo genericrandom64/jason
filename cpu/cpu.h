@@ -22,30 +22,33 @@
 
 // CPU REGISTERS
 
-extern uint16_t PC;	// program counter
-extern uint8_t	S,	// stack pointer
-	A,		// accumulator
-	X,		// X register
-	Y,		// Y register
-	P,		// status register
-	ITC;		// instruction timer to waste cycles until the instruction is supposed to be done
+typedef struct cpu {
+	uint16_t PC;
+	uint8_t	S;
+	uint8_t A;
+	uint8_t X;
+	uint8_t Y;
+	uint8_t P;
+	uint8_t ITC;
+	uint8_t memmap[0xFFFF];
+	uint8_t *stack;
+} j65_t;
 
+void j65_init(j65_t* cpu);
+	
 // MEMORY
 #ifdef NES
 extern char	vram[2048],	// 2kb of video ram
 		oam[256],	// sprite data
 		palette[28];	// on the ppu chip
 #endif
-extern uint8_t
-	memmap[0xFFFF],	// system memory
-	*stack;	// convenience pointer for the stack on page 1
 
 // PROGRAM DEFINES AND FUNCTION PROTOTYPES
 
 #define UOP // We want undefined opcodes
 #define NOBCD // we do *not* want decimal mode in an NES emulator
 
-typedef void(*function_pointer_array)();
+typedef void(*function_pointer_array)(j65_t*);
 
 #ifdef NES
 // MEMORY MAPPED REGISTERS
