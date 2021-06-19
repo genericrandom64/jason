@@ -56,7 +56,7 @@ void or(j65_t* cpu, uint8_t o) {
 	cpu->A |= o;
 	or_com(cpu, cpu->A);
 }
-
+/*
 void adc8(j65_t* cpu, uint8_t src, uint8_t *addreg) {
 	// TODO sign this and set overflow accordingly
 	// DO you sign this? i hate addition and subtraction now
@@ -100,7 +100,7 @@ void adc8(j65_t* cpu, uint8_t src, uint8_t *addreg) {
 	// TODO THIS DOES NOT WORK. cannot believe i missed this because it breaks absolute address opcodes
 	cpu->PC+=2;
 }
-
+*/
 void bit(j65_t* cpu, uint8_t src) {
 	if((src & 0b01000000) != 0) {
 		cpu->P |= SET_P_OVERFLOW;
@@ -193,4 +193,43 @@ void and(j65_t* cpu, uint8_t i) {
 	cpu->A&=i;
 	or_com(cpu, cpu->A);
 }
+
+// TODO add BCD
+void sbc(j65_t* cpu, uint8_t i) {
+	uint16_t carry = (cpu->P & MASK_P_CARRY) ? 0x00 : 0x01;
+	uint16_t A = cpu->A;
+	uint16_t result = A - i - (1 - carry); //TODO: Verify the carry handling
+	if (result > 0xFF) {
+		cpu->P |= SET_P_CARRY;	
+	}
+	chkzero(cpu, result);
+	chknegative(cpu, result);
+	cpu->A = (0xFF & result);
+}
+
+void adc(j65_t* cpu, uint8_t i) {
+	uint16_t carry = (cpu->P & MASK_P_CARRY) ? 0x00 : 0x01;
+	uint16_t A = cpu->A;
+	uint16_t result = A + i + carry; //TODO: Verify the carry handling
+	if (result > 0xFF) {
+		cpu->P |= SET_P_CARRY;	
+	}
+	chkzero(cpu, result);
+	chknegative(cpu, result);
+	cpu->A = (0xFF & result);
+}
+
+void compare(j65_t* cpu, uint8_t i, uint8_t j) {
+	uint8_t result = i - j;
+	chknegative(cpu, result);
+        if (i >= j) {
+		cpu->P |= SET_P_CARRY;	
+        }
+	chkzero(cpu, result);
+}
+
+#define cmp(cpu, i) compare(cpu->A, i)
+#define cpx(cpu, i) compare(cpu->X, i)
+#define cpy(cpu, i) compare(cpu->Y, i)
+
 #endif

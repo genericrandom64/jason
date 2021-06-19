@@ -440,12 +440,14 @@ void op68(j65_t* cpu) {
 
 void op65(j65_t* cpu) {
 	cpu->ITC = 3;
-	adc8(cpu, cpu->memmap[cpu->memmap[cpu->PC+1]], &cpu->A);
+	adc(cpu, cpu->memmap[cpu->memmap[cpu->PC+1]]);
+	cpu->PC+=2;
 }
 
 void op69(j65_t* cpu) {
 	cpu->ITC = 2;
-	adc8(cpu, cpu->memmap[cpu->PC+1], &cpu->A);
+	adc(cpu, cpu->memmap[cpu->PC+1]);
+	cpu->PC+=2;
 }
 
 void op6a(j65_t* cpu) {
@@ -497,8 +499,9 @@ void op74(j65_t* cpu) {
 }
 
 void op75(j65_t* cpu) {
-	cpu->ITC = 3;
-	adc8(cpu, cpu->memmap[cpu->memmap[cpu->PC+1]], &cpu->X);
+	cpu->ITC = 4;
+	adc(cpu, cpu->memmap[cpu->X+cpu->memmap[cpu->PC+1]]);
+	cpu->PC+=2;
 }
 
 void op78(j65_t* cpu) {
