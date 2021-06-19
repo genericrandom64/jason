@@ -76,7 +76,7 @@ $(MAIN): $(TOBJS)
 	$(CC) $(CFLAGS) $(INCLUDES) -c $<  -o $@
 
 clean:
-	$(RM) *.o *~ $(MAIN) $(SOBJS)
+	$(RM) *.o *~ $(MAIN) $(SOBJS) $(TOBJS)
 
 depend: $(SRCS)
 	makedepend $(INCLUDES) $^
