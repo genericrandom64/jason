@@ -11,7 +11,7 @@
 void test_asl(j65_t* cpu, uint8_t value, int _PC, uint8_t _C, uint8_t _N) {
 	cpu->PC = 0;
 	uint8_t result = (value << 1) & 0xFF;
-	while(cpu->PC < _PC) tick();
+	while(cpu->PC < _PC) tick(cpu);
 	assert(cpu->A==result);	
 	if (_C) {
 		assert(GET_C!=0);	
