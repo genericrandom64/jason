@@ -61,6 +61,7 @@ void (*srqh)(uint8_t a, uint8_t b) = NULL;
 
 #include "internal/common.h"
 
+// TODO review all abs,Z functions with pagebounds to check for errors in page handling
 // TODO does the 65c02 have different cycle times?
 // TODO use some damn pointers
 // TODO 2 stage pipeline?
@@ -482,6 +483,12 @@ void op6c(j65_t* cpu) {
 	cpu->PC = short2addr(cpu->memmap[acp], cpu->memmap[addr+1]);
 }
 
+void op6d(j65_t* cpu) {
+	cpu->ITC = 4;
+	adc(cpu, cpu->memmap[short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2])]);
+	cpu->PC+=3;
+}
+
 void op70(j65_t* cpu) {
 	cpu->ITC = 2;
 	if((cpu->P & SET_P_OVERFLOW) != 0) branch(cpu);
@@ -510,6 +517,14 @@ void op78(j65_t* cpu) {
 	cpu->PC++;
 }
 
+void op79(j65_t* cpu) {
+	cpu->ITC = 4;
+	uint16_t addr = short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2]), addry = addr+cpu->Y;
+	if(new_page(addr, addry) == 1) cpu->ITC++;
+	adc(cpu, cpu->memmap[addry]);
+	cpu->PC+=3;
+}
+
 void op7a(j65_t* cpu) {
 	opea(cpu);
 }
@@ -518,6 +533,14 @@ void op7c(j65_t* cpu) {
 	cpu->ITC = 4;
 	uint16_t addr = short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2]), addrx = addr+cpu->X;
 	if(new_page(addr, addrx) == 1) cpu->ITC++;
+	cpu->PC+=3;
+}
+
+void op7d(j65_t* cpu) {
+	cpu->ITC = 4;
+	uint16_t addr = short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2]), addrx = addr+cpu->X;
+	if(new_page(addr, addrx) == 1) cpu->ITC++;
+	adc(cpu, cpu->memmap[addrx]);
 	cpu->PC+=3;
 }
 
@@ -534,6 +557,12 @@ void op82(j65_t* cpu) {
 void op84(j65_t* cpu) {
 	cpu->ITC = 3;
 	cpu->memmap[cpu->memmap[cpu->PC+1]] = cpu->Y;
+	cpu->PC+=2;
+}
+
+void op85(j65_t* cpu) {
+	cpu->ITC = 3;
+	cpu->memmap[cpu->memmap[cpu->PC+1]] = cpu->A;
 	cpu->PC+=2;
 }
 
@@ -636,6 +665,24 @@ void op9a(j65_t* cpu) {
 	cpu->PC++;
 }
 
+void opa0(j65_t* cpu) {
+	cpu->ITC = 2;
+	ldy(cpu, cpu->memmap[cpu->PC+1]);
+	cpu->PC+=2;
+}
+
+void opa2(j65_t* cpu) {
+	cpu->ITC = 2;
+	ldx(cpu, cpu->memmap[cpu->PC+1]);
+	cpu->PC+=2;
+}
+
+void opa4(j65_t* cpu) {
+	cpu->ITC = 2;
+	ldy(cpu, cpu->memmap[cpu->memmap[cpu->PC+1]]);
+	cpu->PC+=2;
+}
+
 void opa5(j65_t* cpu) {
 	cpu->ITC = 3;
 	lda(cpu, cpu->memmap[cpu->memmap[cpu->PC+1]]);
@@ -676,6 +723,12 @@ void opab(j65_t* cpu) {
 	cpu->X = cpu->A & cpu->memmap[cpu->PC+1];
 	system_request(cpu, 0xAB, cpu->memmap[cpu->PC+1]);
 	cpu->PC+=2;
+}
+
+void opac(j65_t* cpu) {
+	cpu->ITC = 4;
+	ldy(cpu, cpu->memmap[short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+1])]);
+	cpu->PC+=3;
 }
 
 void opad(j65_t* cpu) {
@@ -775,9 +828,27 @@ void opbf(j65_t* cpu) {
 	cpu->PC+=3;
 }
 
+void opc0(j65_t* cpu) {
+	cpu->ITC = 2;
+	cpy(cpu, cpu->memmap[cpu->PC+1]);
+	cpu->PC+=2;
+}
+
 void opc2(j65_t* cpu) {
 	opea(cpu);
 	cpu->PC++;
+}
+
+void opc4(j65_t* cpu) {
+	cpu->ITC = 3;
+	cpy(cpu, cpu->memmap[cpu->memmap[cpu->PC+1]]);
+	cpu->PC+=2;
+}
+
+void opc5(j65_t* cpu) {
+	cpu->ITC = 3;
+	cmp(cpu, cpu->memmap[cpu->memmap[cpu->PC+1]]);
+	cpu->PC+=2;
 }
 
 void opc6(j65_t* cpu) {
@@ -797,11 +868,29 @@ void opc8(j65_t* cpu) {
 	cpu->PC++;
 }
 
+void opc9(j65_t* cpu) {
+	cpu->ITC = 2;
+	cmp(cpu, cpu->memmap[cpu->PC+1]);
+	cpu->PC+=2;
+}
+
 void opca(j65_t* cpu) {
 	cpu->ITC = 2;
 	cpu->X--;
 	chknegative(cpu, cpu->X);
 	cpu->PC++;
+}
+
+void opcc(j65_t* cpu) {
+	cpu->ITC = 3;
+	cpy(cpu, cpu->memmap[short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2])]);
+	cpu->PC+=2;
+}
+
+void opcd(j65_t* cpu) {
+	cpu->ITC = 4;
+	cmp(cpu, cpu->memmap[short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2])]);
+	cpu->PC+=2;
 }
 
 void opce(j65_t* cpu) {
@@ -824,6 +913,12 @@ void opd4(j65_t* cpu) {
 	cpu->PC++;
 }
 
+void opd5(j65_t* cpu) {
+	cpu->ITC = 4;
+	cmp(cpu, cpu->memmap[(uint8_t)(cpu->X+cpu->memmap[cpu->PC+1])]);
+	cpu->PC+=2;
+}
+
 void opd8(j65_t* cpu) {
 	cpu->ITC = 2;
 	cpu->P &= MASK_P_DECIMAL;
@@ -834,6 +929,14 @@ void opd0(j65_t* cpu) {
 	cpu->ITC = 2;
 	if((cpu->P & SET_P_ZERO) == 0) branch(cpu);
 	else cpu->PC+=2;
+}
+
+void opd9(j65_t* cpu) {
+	cpu->ITC = 4;
+	uint16_t addr = short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2]), addry = addr+cpu->Y;
+	if(new_page(addr, addry) == 1) cpu->ITC++;
+	cmp(cpu, cpu->memmap[addry]);
+	cpu->PC+=2;
 }
 
 void opda(j65_t* cpu) {
@@ -847,6 +950,14 @@ void opdc(j65_t* cpu) {
 	cpu->PC+=3;
 }
 
+void opdd(j65_t* cpu) {
+	cpu->ITC = 4;
+	uint16_t addr = short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2]), addrx = addr+cpu->X;
+	if(new_page(addr, addrx) == 1) cpu->ITC++;
+	cmp(cpu, cpu->memmap[addrx]);
+	cpu->PC+=2;
+}
+
 void opde(j65_t* cpu) {
 	cpu->ITC = 7;
 	cpu->memmap[short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2])+cpu->X]--;
@@ -856,9 +967,27 @@ void opde(j65_t* cpu) {
 	cpu->PC+=3;
 }
 
+void ope0(j65_t* cpu) {
+	cpu->ITC = 2;
+	cpx(cpu, cpu->memmap[cpu->PC+1]);
+	cpu->PC+=2;
+}
+
 void ope2(j65_t* cpu) {
 	opea(cpu);
 	cpu->PC++;
+}
+
+void ope4(j65_t* cpu) {
+	cpu->ITC = 3;
+	cpx(cpu, cpu->memmap[cpu->memmap[cpu->PC+1]]);
+	cpu->PC+=2;
+}
+
+void ope5(j65_t* cpu) {
+	cpu->ITC = 3;
+	sbc(cpu, cpu->memmap[cpu->memmap[cpu->PC+1]]);
+	cpu->PC+=2;
 }
 
 void ope6(j65_t* cpu) {
@@ -876,6 +1005,24 @@ void ope8(j65_t* cpu) {
 	cpu->X++;
 	chknegative(cpu, cpu->X);
 	cpu->PC++;
+}
+
+void ope9(j65_t* cpu) {
+	cpu->ITC = 2;
+	sbc(cpu, cpu->memmap[cpu->PC+1]);
+	cpu->PC+=2;
+}
+
+void opec(j65_t* cpu) {
+	cpu->ITC = 3;
+	cpx(cpu, cpu->memmap[short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2])]);
+	cpu->PC+=2;
+}
+
+void oped(j65_t* cpu) {
+	cpu->ITC = 4;
+	sbc(cpu, cpu->memmap[short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+1])]);
+	cpu->PC+=3;
 }
 
 void opee(j65_t* cpu) {
@@ -904,10 +1051,24 @@ void opf4(j65_t* cpu) {
 	cpu->PC++;
 }
 
+void opf5(j65_t* cpu) {
+	cpu->ITC = 4;
+	sbc(cpu, cpu->memmap[(uint8_t)(cpu->X+cpu->memmap[cpu->PC+1])]);
+	cpu->PC+=2;
+}
+
 void opf8(j65_t* cpu) {
 	cpu->ITC = 2;
 	cpu->P |= SET_P_DECIMAL;
 	cpu->PC++;
+}
+
+void opf9(j65_t* cpu) {
+	cpu->ITC = 4;
+	uint16_t addr = short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2]), addry = addr+cpu->Y;
+	if(new_page(addr, addry) == 1) cpu->ITC++;
+	sbc(cpu, cpu->memmap[addry]);
+	cpu->PC+=3;
 }
 
 void opfa(j65_t* cpu) {
@@ -918,6 +1079,14 @@ void opfc(j65_t* cpu) {
 	cpu->ITC = 4;
 	uint16_t addr = short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2]), addrx = addr+cpu->X;
 	if(new_page(addr, addrx) == 1) cpu->ITC++;
+	cpu->PC+=3;
+}
+
+void opfd(j65_t* cpu) {
+	cpu->ITC = 4;
+	uint16_t addr = short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2]), addrx = addr+cpu->X;
+	if(new_page(addr, addrx) == 1) cpu->ITC++;
+	sbc(cpu, cpu->memmap[addrx]);
 	cpu->PC+=3;
 }
 
@@ -941,16 +1110,16 @@ NULL,  NULL,  &op02, NULL,  &op04, &op05, &op06, NULL,  &op08, &op09, &op0a, NUL
 &op30, NULL,  &op32, NULL,  &op34, &op35, NULL,  NULL,  &op38, &op39, &op3a, NULL,  &op3c, &op3d, NULL,  NULL, // 3
 &op40, NULL,  &op42, NULL,  &op44, &op45, NULL,  NULL,  &op48, &op49, &op4a, NULL,  &op4c, &op4d, NULL,  NULL, // 4
 &op50, NULL,  &op52, NULL,  &op54, &op55, NULL,  NULL,  &op58, &op59, &op5a, NULL,  &op5c, &op5d, NULL,  NULL, // 5
-&op60, NULL,  &op62, NULL,  &op64, &op65, NULL,  NULL,  &op68, &op69, &op6a, NULL,  &op6c, NULL,  NULL,  NULL, // 6
-&op70, NULL,  &op72, NULL,  &op74, &op75, NULL,  NULL,  &op78, NULL,  &op7a, NULL,  &op7c, NULL,  NULL,  NULL, // 7
-&op80, NULL,  &op82, NULL,  &op84, NULL,  &op86, &op87, &op88, &op89, &op8a, &op8b, &op8c, NULL,  &op8e, &op8f,// 8
+&op60, NULL,  &op62, NULL,  &op64, &op65, NULL,  NULL,  &op68, &op69, &op6a, NULL,  &op6c, &op6d, NULL,  NULL, // 6
+&op70, NULL,  &op72, NULL,  &op74, &op75, NULL,  NULL,  &op78, &op79, &op7a, NULL,  &op7c, &op7d, NULL,  NULL, // 7
+&op80, NULL,  &op82, NULL,  &op84, &op85, &op86, &op87, &op88, &op89, &op8a, &op8b, &op8c, NULL,  &op8e, &op8f,// 8
 &op90, NULL,  &op92, NULL,  &op94, &op95, &op96, NULL,  &op98, NULL,  &op9a, NULL,  NULL,  NULL,  NULL,  NULL, // 9
-NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  &opa5, &opa7, &opa8, &opa9, &opaa, &opab, NULL,  &opad, NULL,  &opaf,// a
-&opb0, NULL,  &opb2, NULL,  &opb4, NULL,  &opb5, &opb6, &opb8, &opb9, &opba, NULL,  &opbc, &opbd, &opbe, &opbf,// b
-NULL,  NULL,  &opc2, NULL,  NULL,  NULL,  &opc6, NULL,  &opc8, NULL,  &opca, NULL,  NULL,  NULL,  &opce, NULL, // c
-&opd0, NULL,  &opd2, NULL,  &opd4, NULL,  NULL,  NULL,  &opd8, NULL,  &opda, NULL,  &opdc, NULL,  &opde, NULL, // d
-NULL,  NULL,  &ope2, NULL,  NULL,  NULL,  &ope6, NULL,  &ope8, NULL,  &opea, NULL,  NULL,  NULL,  &opee, NULL, // e
-&opf0, NULL,  &opf2, NULL,  &opf4, NULL,  NULL,  NULL,  &opf8, NULL,  &opfa, NULL,  &opfc, NULL,  &opfe, NULL  // f
+&opa0, NULL,  &opa2, NULL,  &opa4, &opa5, &opa5, &opa7, &opa8, &opa9, &opaa, &opab, NULL,  &opad, NULL,  &opaf,// a
+&opb0, NULL,  &opb2, NULL,  &opb4, &opb5, &opb5, &opb6, &opb8, &opb9, &opba, NULL,  &opbc, &opbd, &opbe, &opbf,// b
+&opc0, NULL,  &opc2, NULL,  &opc4, &opc5, &opc6, NULL,  &opc8, &opc9, &opca, NULL,  &opcc, &opcd, &opce, NULL, // c
+&opd0, NULL,  &opd2, NULL,  &opd4, &opd5, NULL,  NULL,  &opd8, &opd9, &opda, NULL,  &opdc, &opdd, &opde, NULL, // d
+&ope0, NULL,  &ope2, NULL,  &ope4, &ope5, &ope6, NULL,  &ope8, &ope9, &opea, NULL,  &opec, &oped, &opee, NULL, // e
+&opf0, NULL,  &opf2, NULL,  &opf4, &opf5, NULL,  NULL,  &opf8, &opf9, &opfa, NULL,  &opfc, &opfd, &opfe, NULL  // f
 };
 #endif
 

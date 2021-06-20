@@ -228,8 +228,8 @@ void compare(j65_t* cpu, uint8_t i, uint8_t j) {
 	chkzero(cpu, result);
 }
 
-#define cmp(cpu, i) compare(cpu->A, i)
-#define cpx(cpu, i) compare(cpu->X, i)
-#define cpy(cpu, i) compare(cpu->Y, i)
+#define cmp(C, i) compare(C, C->A, i)
+#define cpx(C, i) compare(C, C->X, i)
+#define cpy(C, i) compare(C, C->Y, i)
 
 #endif

@@ -16,7 +16,7 @@ void testz(j65_t* cpu) {
 }
 
 void fail(uint8_t caller, uint8_t data) {
-	printf("Branch did not fail.\n");
+	printf("Branch did not fail.\nC 0x%X D 0x%X", caller, data);
 	abort();
 }
 
