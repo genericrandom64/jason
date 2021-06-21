@@ -54,7 +54,7 @@ void j65_init(j65_t* cpu) {
 	cpu->ITC = 0;
 	cpu->P = 0;
 	cpu->S = 255;
-	cpu->stack = cpu->memmap+0x100;	// TODO the stack funcs are wrong
+	cpu->stack = (uint8_t *)cpu->memmap+0x100;	// TODO the stack funcs are wrong
 }
 
 void (*srqh)(uint8_t a, uint8_t b) = NULL;
@@ -1121,6 +1121,25 @@ NULL,  NULL,  &op02, NULL,  &op04, &op05, &op06, NULL,  &op08, &op09, &op0a, NUL
 &ope0, NULL,  &ope2, NULL,  &ope4, &ope5, &ope6, NULL,  &ope8, &ope9, &opea, NULL,  &opec, &oped, &opee, NULL, // e
 &opf0, NULL,  &opf2, NULL,  &opf4, &opf5, NULL,  NULL,  &opf8, &opf9, &opfa, NULL,  &opfc, &opfd, &opfe, NULL  // f
 };
+
+uint32_t times[] = {
+7, 6, 0xFFFFFFFF, 8, 3, 3, 5, 5, 3, 2, 2, 2, 4, 4, 6, 6,
+2, 5, 0xFFFFFFFF, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
+6, 6, 0xFFFFFFFF, 8, 3, 3, 5, 5, 4, 2, 2, 2, 4, 4, 6, 6,
+2, 5, 0xFFFFFFFF, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
+6, 6, 0xFFFFFFFF, 8, 3, 3, 5, 5, 3, 2, 2, 2, 3, 4, 6, 6,
+2, 5, 0xFFFFFFFF, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
+6, 6, 0xFFFFFFFF, 8, 3, 3, 5, 5, 4, 2, 2, 2, 5, 4, 6, 6,
+2, 5, 0xFFFFFFFF, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
+2, 6, 2, 6, 3, 3, 3, 3, 2, 2, 2, 2, 4, 4, 4, 4,
+2, 6, 0xFFFFFFFF, 6, 4, 4, 4, 4, 2, 5, 2, 5, 5, 5, 5, 5,
+2, 6, 2, 6, 3, 3, 3, 3, 2, 2, 2, 2, 4, 4, 4, 4,
+2, 5, 0xFFFFFFFF, 5, 4, 4, 4, 4, 2, 4, 2, 4, 4, 4, 4, 4,
+2, 6, 2, 8, 3, 3, 5, 5, 2, 2, 2, 2, 4, 4, 3, 6,
+2, 5, 0xFFFFFFFF, 8, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7,
+2, 6, 2, 8, 3, 3, 5, 5, 2, 2, 2, 2, 4, 4, 6, 6,
+2, 5, 0xFFFFFFFF, 4, 4, 4, 6, 6, 2, 4, 2, 7, 4, 4, 7, 7
+};
 #endif
 
 #ifdef WDC_65C02
@@ -1142,9 +1161,11 @@ void tick(j65_t* cpu) {
 			#ifndef NOLIBC
 			printf("Opcode 0x%X at 0x%X\n", copc, cpu->PC);
 			#endif
+			cpu->ITC = times[copc];
 			opcodes[copc](cpu);
 		} else {
 			#ifndef NOLIBC
+			cpu->ITC = 2;
 			printf("NULL Ocpu->PCODE: 0x%X. It will be replaced by NOP. This *will* break the program counter!\ncpu->PC: 0x%X\n", (uint8_t) cpu->memmap[cpu->PC+1], cpu->PC);
 			#endif
 			opea(cpu);

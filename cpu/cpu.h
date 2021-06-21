@@ -30,7 +30,7 @@ typedef struct cpu {
 	uint8_t Y;
 	uint8_t P;
 	uint8_t ITC;
-	uint8_t memmap[0xFFFF];
+	uint8_t *memmap;
 	uint8_t *stack;
 } j65_t;
 
