@@ -31,6 +31,8 @@ j65 is primarily tested on:
 
 it *should,* however, work on any 32 bit operating system with a working c compiler.
 
+`util/j65-monitor.out` will let you test binaries with j65. it will load them with entry point 0x00, so you will have to jump out of zeropage yourself. it provides basic machine code debugging tools, like register state and steps. it does not have a disassembler, machine code viewer, or breakpoints. *yet.*
+
 there are some tests in `tests/` but they do not cover the majority of opcodes yet.
 
 ## website?

@@ -113,7 +113,7 @@ void branch(j65_t* cpu) {
 	// TODO will this work on a page bound ( DO | 01)?
 	if(new_page(cpu->PC-1, cpu->PC+(int8_t)cpu->memmap[cpu->PC])) cpu->ITC++;
 	cpu->PC+=(int8_t)cpu->memmap[cpu->PC];
-	cpu->PC++;
+	cpu->PC-=1;
 }
 
 uint8_t zpz(uint8_t base, uint8_t index) {
