@@ -6,7 +6,7 @@ int main() {
 	j65_t cpu;
 	j65_init(&cpu);
 	// fill memory with garbage data to eliminate false positives
-	for(uint16_t i; i < 0xFFFF; i++) {
+	for(uint16_t i = 0; i < 0xFFFF; i++) {
 		cpu.memmap[i] = 0x75;
 	}
 	cpu.PC = 0;

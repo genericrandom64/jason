@@ -1,8 +1,11 @@
 # build tests
-make clean all
+[ "$(uname)" = "OpenBSD" ] && g=g;
+$g\make clean all
 
 # update site table
-[ "$(whoami)" = "generic" ] && tests/html.out > /tmp/opl; TMVAR=$?; doas chown http:http /tmp/opl; doas -u http mv /tmp/opl /srv/http/computer/opcodes/
+[ "$(whoami)" = "generic" ] && [ "$(uname)" = "Linux" ] && util/html.out > /tmp/opl
+TMVAR=$?
+[ "$(whoami)" = "generic" ] && [ "$(uname)" = "Linux" ] && doas chown http:http /tmp/opl && doas -u http mv /tmp/opl /srv/http/computer/opcodes/
 cd cpu
 ./chk.sh
 cd ..

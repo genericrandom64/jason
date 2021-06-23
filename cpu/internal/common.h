@@ -56,51 +56,7 @@ void or(j65_t* cpu, uint8_t o) {
 	cpu->A |= o;
 	or_com(cpu, cpu->A);
 }
-/*
-void adc8(j65_t* cpu, uint8_t src, uint8_t *addreg) {
-	// TODO sign this and set overflow accordingly
-	// DO you sign this? i hate addition and subtraction now
-	uint16_t res = 0;
-	int cmpval = 0;
-	int8_t res8 = 0;
-	#ifndef NOBCD
-	if((cpu->P & SET_P_DECIMAL) != 0)
-	#endif
-	{
-		res = *addreg + cpu->memmap[cpu->PC+1];
-		cmpval = *addreg + cpu->memmap[cpu->PC+1];
-		res8 = res & 0b0000000011111111;
-		if((res & 0b0000000100000000) != 0) {
-			cpu->P |= SET_P_CARRY;
-		} else {
-			cpu->P &= MASK_P_CARRY;
-		}
-	}
-	#ifndef NOBCD
-	else {
-		// TODO does bcd have sign?
-		int8_t AB = bcd2int(*addreg), CB = bcd2int(memmap[PC+1]);
-		res = AB + CB;
-		cmpval = AB + CB;
-		res8 = res & 0b0000000011111111;
-		// TODO set carry correctly
-		if((res & 0b0000000100000000) != 0) {
-			cpu->P |= SET_P_CARRY;
-		} else {
-			cpu->P &= MASK_P_CARRY;
-		}
-		res8 = int2bcd(res8);
-	}
-	#endif
-	// TODO is the result stored to A?
-	cpu->A = res8;
-	chkzero(cpu, cpu->A);
-	// TODO make sure cmp works
-	if(cmpval != res8) cpu->P |= SET_P_OVERFLOW;
-	// TODO THIS DOES NOT WORK. cannot believe i missed this because it breaks absolute address opcodes
-	cpu->PC+=2;
-}
-*/
+
 void bit(j65_t* cpu, uint8_t src) {
 	if((src & 0b01000000) != 0) {
 		cpu->P |= SET_P_OVERFLOW;
@@ -231,5 +187,18 @@ void compare(j65_t* cpu, uint8_t i, uint8_t j) {
 #define cmp(C, i) compare(C, C->A, i)
 #define cpx(C, i) compare(C, C->X, i)
 #define cpy(C, i) compare(C, C->Y, i)
+
+uint16_t indirect(j65_t* cpu, uint16_t addr) {
+	return short2addr(cpu->memmap[addr], cpu->memmap[addr+1]);
+}
+
+uint16_t indirect_indexed(j65_t* cpu, uint8_t zpg) {
+	return indirect(cpu, zpg) + cpu->Y;
+}
+
+uint16_t indexed_indirect(j65_t* cpu, uint8_t zpg) {
+	return indirect(cpu, (uint8_t)zpg+cpu->X);
+}
+
 
 #endif

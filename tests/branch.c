@@ -25,7 +25,7 @@ int main() {
 	j65_init(&cpu);
 	cpu.P = 0;
 	register_system_request(fail);
-	for(uint16_t i; i < 0xFFFF; i++) {
+	for(uint16_t i = 0; i < 0xFFFF; i++) {
 		cpu.memmap[i] = 0x75;
 	}
 	cpu.memmap[0] = 0x50;

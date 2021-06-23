@@ -37,7 +37,8 @@ TESTS = $(TEST_DIR)/flag.c \
 	$(TEST_DIR)/jmp-page-bound-error.c \
 	$(TEST_DIR)/branch.c \
 	$(TEST_DIR)/sysrq.c \
-	$(TEST_DIR)/html.c
+	util/html.c \
+	util/j65-monitor.c \
 
 # define the C object files 
 #
@@ -83,36 +84,13 @@ depend: $(SRCS)
 
 # DO NOT DELETE THIS LINE -- make depend needs it
 
-cpu/cpu.o: cpu/cpu.h /usr/include/stdint.h
-cpu/cpu.o: /usr/include/bits/libc-header-start.h /usr/include/features.h
-cpu/cpu.o: /usr/include/stdc-predef.h /usr/include/sys/cdefs.h
-cpu/cpu.o: /usr/include/bits/wordsize.h /usr/include/bits/long-double.h
-cpu/cpu.o: /usr/include/gnu/stubs.h /usr/include/bits/types.h
-cpu/cpu.o: /usr/include/bits/timesize.h /usr/include/bits/typesizes.h
-cpu/cpu.o: /usr/include/bits/time64.h /usr/include/bits/wchar.h
-cpu/cpu.o: /usr/include/bits/stdint-intn.h /usr/include/bits/stdint-uintn.h
-cpu/cpu.o: /usr/include/string.h /usr/include/bits/types/locale_t.h
-cpu/cpu.o: /usr/include/bits/types/__locale_t.h /usr/include/strings.h
-cpu/cpu.o: /usr/include/stdio.h /usr/include/bits/types/__fpos_t.h
-cpu/cpu.o: /usr/include/bits/types/__mbstate_t.h
-cpu/cpu.o: /usr/include/bits/types/__fpos64_t.h
-cpu/cpu.o: /usr/include/bits/types/__FILE.h /usr/include/bits/types/FILE.h
-cpu/cpu.o: /usr/include/bits/types/struct_FILE.h
-cpu/cpu.o: /usr/include/bits/stdio_lim.h /usr/include/bits/floatn.h
-cpu/cpu.o: /usr/include/bits/floatn-common.h /usr/include/stdlib.h
-cpu/cpu.o: /usr/include/bits/waitflags.h /usr/include/bits/waitstatus.h
-cpu/cpu.o: /usr/include/sys/types.h /usr/include/bits/types/clock_t.h
-cpu/cpu.o: /usr/include/bits/types/clockid_t.h
-cpu/cpu.o: /usr/include/bits/types/time_t.h /usr/include/bits/types/timer_t.h
-cpu/cpu.o: /usr/include/endian.h /usr/include/bits/endian.h
-cpu/cpu.o: /usr/include/bits/endianness.h /usr/include/bits/byteswap.h
-cpu/cpu.o: /usr/include/bits/uintn-identity.h /usr/include/sys/select.h
-cpu/cpu.o: /usr/include/bits/select.h /usr/include/bits/types/sigset_t.h
-cpu/cpu.o: /usr/include/bits/types/__sigset_t.h
-cpu/cpu.o: /usr/include/bits/types/struct_timeval.h
-cpu/cpu.o: /usr/include/bits/types/struct_timespec.h
-cpu/cpu.o: /usr/include/bits/pthreadtypes.h
-cpu/cpu.o: /usr/include/bits/thread-shared-types.h
-cpu/cpu.o: /usr/include/bits/pthreadtypes-arch.h
-cpu/cpu.o: /usr/include/bits/struct_mutex.h /usr/include/bits/struct_rwlock.h
-cpu/cpu.o: /usr/include/alloca.h /usr/include/bits/stdlib-float.h
+cpu/cpu.o: cpu/cpu.h /usr/include/stdint.h /usr/include/sys/cdefs.h
+cpu/cpu.o: /usr/include/machine/cdefs.h /usr/include/powerpc/cdefs.h
+cpu/cpu.o: /usr/include/machine/_types.h /usr/include/powerpc/_types.h
+cpu/cpu.o: /usr/include/stddef.h /usr/include/sys/_null.h
+cpu/cpu.o: /usr/include/sys/_types.h /usr/include/string.h
+cpu/cpu.o: /usr/include/strings.h /usr/include/stdio.h
+cpu/cpu.o: /usr/include/sys/types.h /usr/include/sys/endian.h
+cpu/cpu.o: /usr/include/sys/_endian.h /usr/include/machine/endian.h
+cpu/cpu.o: /usr/include/powerpc/endian.h /usr/include/stdlib.h
+cpu/cpu.o: cpu/internal/common.h

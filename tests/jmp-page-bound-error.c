@@ -8,7 +8,7 @@ int main() {
 	// test 6502 jmp bug
 	cpu.PC = 0;
 	cpu.ITC = 1;
-	for(uint16_t i; i < 0xFFFF; i++) {
+	for(uint16_t i = 0; i < 0xFFFF; i++) {
 		cpu.memmap[i] = 0x75;
 	}
 	cpu.memmap[0] = 0x6C;

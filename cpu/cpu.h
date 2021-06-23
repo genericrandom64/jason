@@ -35,6 +35,7 @@ typedef struct cpu {
 } j65_t;
 
 void j65_init(j65_t* cpu);
+void j65_set_stack(j65_t* cpu);
 	
 // MEMORY
 #ifdef NES
