@@ -48,7 +48,8 @@ void j65_init(j65_t* cpu) {
 	cpu->ITC = 1; // TODO zero
 	cpu->P = 0;
 	cpu->S = 255;
-	// TODO the stack funcs are wrong
+	cpu->I = 0;
+	// TODO the stack funcs are wrong?
 }
 
 void j65_set_stack(j65_t* cpu) {
@@ -59,6 +60,8 @@ void (*srqh)(uint8_t a, uint8_t b) = NULL;
 
 #include "internal/common.h"
 
+// TODO interrupts
+// TODO create document detailing every 6502 opcode
 // TODO review all abs,Z functions with pagebounds to check for errors in page handling
 // TODO does the 65c02 have different cycle times?
 // TODO use some damn pointers
@@ -82,8 +85,6 @@ void opea(j65_t* cpu) {
 }
 
 void op04(j65_t* cpu) {
-	opea(cpu);
-	cpu->ITC++;
 }
 
 void op05(j65_t* cpu) {
@@ -107,8 +108,6 @@ void op0a(j65_t* cpu) {
 }
 
 void op0c(j65_t* cpu) {
-	opea(cpu);
-	cpu->ITC+=2;
 }
 
 void op0d(j65_t* cpu) {
@@ -122,7 +121,6 @@ void op0e(j65_t* cpu) {
 
 void op10(j65_t* cpu) {
 	if((cpu->P & SET_P_NEGATIVE) == 0) branch(cpu);
-	else cpu->PC+=2;
 }
 
 void op11(j65_t* cpu) {
@@ -134,8 +132,6 @@ void op12(j65_t* cpu) {
 }
 
 void op14(j65_t* cpu) {
-	opea(cpu);
-	cpu->ITC+=2;
 }
 
 void op15(j65_t* cpu) {
@@ -156,7 +152,6 @@ void op19(j65_t* cpu) {
 }
 
 void op1a(j65_t* cpu) {
-	opea(cpu);
 }
 
 void op1c(j65_t* cpu) {
@@ -201,6 +196,10 @@ void op25(j65_t* cpu) {
 	chkzero(cpu, cpu->A)
 }
 
+void op26(j65_t* cpu) {
+	rol(cpu, cpu->memmap[cpu->memmap[cpu->PC+1]]);
+}
+
 void op28(j65_t* cpu) {
 	cpu->P = cpu->stack[cpu->S++];
 }
@@ -211,16 +210,7 @@ void op29(j65_t* cpu) {
 }
 
 void op2a(j65_t* cpu) {
-
-	uint8_t tmp = cpu->P & SET_P_CARRY;
-
-	chkcarry(cpu, cpu->A);
-
-	cpu->A <<= 1;
-
-	if(tmp != 0) cpu->A |= 1;
-	chkzero(cpu, cpu->A)
-
+	rol(cpu, cpu->A);
 }
 
 void op2c(j65_t* cpu) {
@@ -229,6 +219,10 @@ void op2c(j65_t* cpu) {
 
 void op2d(j65_t* cpu) {
 	and(cpu, cpu->memmap[short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2])]);
+}
+
+void op2e(j65_t* cpu) {
+	rol(cpu, cpu->memmap[short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2])]);
 }
 
 void op30(j65_t* cpu) {
@@ -244,13 +238,15 @@ void op32(j65_t* cpu) {
 }
 
 void op34(j65_t* cpu) {
-	opea(cpu);
-	cpu->ITC+=2;
 }
 
 void op35(j65_t* cpu) {
 	cpu->A = cpu->memmap[cpu->memmap[cpu->PC+1]] & cpu->X;
 	chkzero(cpu, cpu->A)
+}
+
+void op36(j65_t* cpu) {
+	rol(cpu, (uint8_t)(cpu->X+cpu->memmap[cpu->memmap[cpu->PC+1]]));
 }
 
 void op38(j65_t* cpu) {
@@ -264,7 +260,6 @@ void op39(j65_t* cpu) {
 }
 
 void op3a(j65_t* cpu) {
-	opea(cpu);
 }
 
 void op3c(j65_t* cpu) {
@@ -278,6 +273,10 @@ void op3d(j65_t* cpu) {
 	and(cpu, cpu->memmap[(uint16_t)cpu->X+short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2])]);
 }
 
+void op3e(j65_t* cpu) {
+	rol(cpu, cpu->memmap[(uint16_t)(short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2])+cpu->X)]);
+}
+
 void op60(j65_t* cpu) {
 	cpu->PC = (cpu->stack[cpu->S+1]) | (cpu->stack[cpu->S+2] << 8);
 	cpu->S += 2;
@@ -285,11 +284,8 @@ void op60(j65_t* cpu) {
 
 void op40(j65_t* cpu) {
 	// TODO this seems *really, really* wrong to me, figure this out
-	// TODO check this and op60 to make sure low byte is popped first
 	op28(cpu);
 	op60(cpu);
-	// simulating 2 opcodes has broken program counter, account for this
-	cpu->PC--;
 }
 
 void op41(j65_t* cpu) {
@@ -301,12 +297,14 @@ void op42(j65_t* cpu) {
 }
 
 void op44(j65_t* cpu) {
-	opea(cpu);
-	cpu->ITC++;
 }
 
 void op45(j65_t* cpu) {
 	xor(cpu,  cpu->memmap[cpu->memmap[cpu->PC+1]]);
+}
+
+void op46(j65_t* cpu) {
+	lsr(cpu, cpu->memmap[cpu->memmap[cpu->PC+1]]);
 }
 
 void op48(j65_t* cpu) {
@@ -318,23 +316,19 @@ void op49(j65_t* cpu) {
 }
 
 void op4a(j65_t* cpu) {
-	if((cpu->A & 0b00000001) != 0) {
-		cpu->P |= SET_P_CARRY;
-	} else {
-		cpu->P &= MASK_P_CARRY;
-	}
-
-	cpu->A >>= 1;
-	chkzero(cpu, cpu->A)
+	lsr(cpu, cpu->A);
 }
 
 void op4d(j65_t* cpu) {
 	xor(cpu,  short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2]));
 }
 
+void op4e(j65_t* cpu) {
+	lsr(cpu, cpu->memmap[short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2])]);
+}
+
 void op50(j65_t* cpu) {
 	if((cpu->P & SET_P_OVERFLOW) == 0) branch(cpu);
-	else cpu->PC+=2;
 }
 
 void op51(j65_t* cpu) {
@@ -346,12 +340,14 @@ void op52(j65_t* cpu) {
 }
 
 void op54(j65_t* cpu) {
-	opea(cpu);
-	cpu->ITC+=2;
 }
 
 void op55(j65_t* cpu) {
 	xor(cpu,  cpu->memmap[cpu->memmap[zpz(cpu->X, cpu->memmap[cpu->PC+1])]]);
+}
+
+void op56(j65_t* cpu) {
+	lsr(cpu, (uint8_t) (cpu->X+cpu->memmap[cpu->memmap[cpu->PC+1]]));
 }
 
 void op58(j65_t* cpu) {
@@ -377,6 +373,10 @@ void op5d(j65_t* cpu) {
 	xor(cpu,  cpu->memmap[(uint16_t)cpu->X+short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2])]);
 }
 
+void op5e(j65_t* cpu) {
+	lsr(cpu, (uint16_t) (cpu->X+cpu->memmap[short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2])]));
+}
+
 void op61(j65_t* cpu) {
 	adc(cpu, cpu->memmap[indexed_indirect(cpu, cpu->memmap[cpu->PC+1])]);
 }
@@ -386,8 +386,10 @@ void op62(j65_t* cpu) {
 }
 
 void op64(j65_t* cpu) {
-	opea(cpu);
-	cpu->ITC++;
+}
+
+void op66(j65_t* cpu) {
+	ror(cpu, cpu->memmap[cpu->memmap[cpu->PC+1]]);
 }
 
 void op68(j65_t* cpu) {
@@ -404,27 +406,13 @@ void op69(j65_t* cpu) {
 }
 
 void op6a(j65_t* cpu) {
-
-	uint8_t tmp = cpu->P & SET_P_CARRY;
-
-	if((cpu->A & 0b00000001) != 0) {
-		cpu->P |= SET_P_CARRY;
-	} else {
-		cpu->P &= MASK_P_CARRY;
-	}
-
-	cpu->A >>= 1;
-
-	if(tmp != 0) cpu->A |= 1 << 7;
-	chkzero(cpu, cpu->A)
-
+	ror(cpu, cpu->A);
 }
 
 void op6c(j65_t* cpu) {
 	uint16_t addr = short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2]), acp = addr;
 	#ifdef NMOS_6502
-	// only do this on a 6502
-	// 65c02 fixes this
+	// only do this on a 6502. 65c02 fixes this
 	if(((addr+1) % 0x100) == 0) addr-=0x100;
 	#endif
 	cpu->PC = short2addr(cpu->memmap[acp], cpu->memmap[addr+1]);
@@ -434,9 +422,12 @@ void op6d(j65_t* cpu) {
 	adc(cpu, cpu->memmap[short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2])]);
 }
 
+void op6e(j65_t* cpu) {
+	ror(cpu, cpu->memmap[short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2])]);
+}
+
 void op70(j65_t* cpu) {
 	if((cpu->P & SET_P_OVERFLOW) != 0) branch(cpu);
-	else cpu->PC+=2;
 }
 
 void op71(j65_t* cpu) {
@@ -448,12 +439,14 @@ void op72(j65_t* cpu) {
 }
 
 void op74(j65_t* cpu) {
-	opea(cpu);
-	cpu->ITC+=2;
 }
 
 void op75(j65_t* cpu) {
 	adc(cpu, cpu->memmap[cpu->X+cpu->memmap[cpu->PC+1]]);
+}
+
+void op76(j65_t* cpu) {
+	ror(cpu, cpu->memmap[(uint8_t)(cpu->X+cpu->memmap[cpu->PC+1])]);
 }
 
 void op78(j65_t* cpu) {
@@ -467,7 +460,6 @@ void op79(j65_t* cpu) {
 }
 
 void op7a(j65_t* cpu) {
-	opea(cpu);
 }
 
 void op7c(j65_t* cpu) {
@@ -481,8 +473,11 @@ void op7d(j65_t* cpu) {
 	adc(cpu, cpu->memmap[addrx]);
 }
 
+void op7e(j65_t* cpu) {
+	ror(cpu, cpu->memmap[(uint16_t)(cpu->X+short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2]))]);
+}
+
 void op80(j65_t* cpu) {
-	opea(cpu);
 }
 
 void op81(j65_t* cpu) {
@@ -490,7 +485,6 @@ void op81(j65_t* cpu) {
 }
 
 void op82(j65_t* cpu) {
-	opea(cpu);
 }
 
 void op84(j65_t* cpu) {
@@ -515,7 +509,6 @@ void op88(j65_t* cpu) {
 }
 
 void op89(j65_t* cpu) {
-	opea(cpu);
 }
 
 void op8a(j65_t* cpu) {
@@ -659,7 +652,6 @@ void opaf(j65_t* cpu) {
 
 void opb0(j65_t* cpu) {
 	if((cpu->P & SET_P_CARRY) != 0) branch(cpu);
-	else cpu->PC+=2;
 }
 
 void opb1(j65_t* cpu) {
@@ -731,7 +723,6 @@ void opc1(j65_t* cpu) {
 }
 
 void opc2(j65_t* cpu) {
-	opea(cpu);
 }
 
 void opc4(j65_t* cpu) {
@@ -789,12 +780,17 @@ void opd2(j65_t* cpu) {
 }
 
 void opd4(j65_t* cpu) {
-	opea(cpu);
-	cpu->ITC+=2;
 }
 
 void opd5(j65_t* cpu) {
 	cmp(cpu, cpu->memmap[(uint8_t)(cpu->X+cpu->memmap[cpu->PC+1])]);
+}
+
+void opd6(j65_t* cpu) {
+	cpu->memmap[(uint8_t)(cpu->memmap[cpu->PC+1]+cpu->X)]--;
+	uint8_t t = cpu->memmap[(uint8_t)(cpu->memmap[cpu->PC+1]+cpu->X)];
+	chkzero(cpu, t);
+	chknegative(cpu, t);
 }
 
 void opd8(j65_t* cpu) {
@@ -812,7 +808,6 @@ void opd9(j65_t* cpu) {
 }
 
 void opda(j65_t* cpu) {
-	opea(cpu);
 }
 
 void opdc(j65_t* cpu) {
@@ -842,7 +837,6 @@ void ope1(j65_t* cpu) {
 }
 
 void ope2(j65_t* cpu) {
-	opea(cpu);
 }
 
 void ope4(j65_t* cpu) {
@@ -899,12 +893,17 @@ void opf2(j65_t* cpu) {
 }
 
 void opf4(j65_t* cpu) {
-	opea(cpu);
-	cpu->ITC+=2;
 }
 
 void opf5(j65_t* cpu) {
 	sbc(cpu, cpu->memmap[(uint8_t)(cpu->X+cpu->memmap[cpu->PC+1])]);
+}
+
+void opf6(j65_t* cpu) {
+	cpu->memmap[(uint8_t)(cpu->memmap[cpu->PC+1]+cpu->X)]++;
+	uint8_t t = cpu->memmap[(uint8_t)(cpu->memmap[cpu->PC+1]+cpu->X)];
+	chkzero(cpu, t);
+	chknegative(cpu, t);
 }
 
 void opf8(j65_t* cpu) {
@@ -918,7 +917,6 @@ void opf9(j65_t* cpu) {
 }
 
 void opfa(j65_t* cpu) {
-	opea(cpu);
 }
 
 void opfc(j65_t* cpu) {
@@ -946,24 +944,20 @@ function_pointer_array opcodes[] = {
 //  0  1      2      3      4      5      6      7      8      9      a      b      c      d      e      f
 NULL,  &op01, &op02, NULL,  &op04, &op05, &op06, NULL,  &op08, &op09, &op0a, NULL,  &op0c, &op0d, &op0e, NULL, // 0
 &op10, &op11, &op12, NULL,  &op14, &op15, &op16, NULL,  &op18, &op19, &op1a, NULL,  &op1c, &op1d, &op1e, NULL, // 1
-&op20, &op21, &op22, NULL,  &op24, &op25, NULL,  NULL,  &op28, &op29, &op2a, NULL,  &op2c, &op2d, NULL,  NULL, // 2
-&op30, &op31, &op32, NULL,  &op34, &op35, NULL,  NULL,  &op38, &op39, &op3a, NULL,  &op3c, &op3d, NULL,  NULL, // 3
-&op40, &op41, &op42, NULL,  &op44, &op45, NULL,  NULL,  &op48, &op49, &op4a, NULL,  &op4c, &op4d, NULL,  NULL, // 4
-&op50, &op51, &op52, NULL,  &op54, &op55, NULL,  NULL,  &op58, &op59, &op5a, NULL,  &op5c, &op5d, NULL,  NULL, // 5
-&op60, &op61, &op62, NULL,  &op64, &op65, NULL,  NULL,  &op68, &op69, &op6a, NULL,  &op6c, &op6d, NULL,  NULL, // 6
-&op70, &op71, &op72, NULL,  &op74, &op75, NULL,  NULL,  &op78, &op79, &op7a, NULL,  &op7c, &op7d, NULL,  NULL, // 7
+&op20, &op21, &op22, NULL,  &op24, &op25, &op26, NULL,  &op28, &op29, &op2a, NULL,  &op2c, &op2d, &op2e, NULL, // 2
+&op30, &op31, &op32, NULL,  &op34, &op35, &op36, NULL,  &op38, &op39, &op3a, NULL,  &op3c, &op3d, &op3e, NULL, // 3
+&op40, &op41, &op42, NULL,  &op44, &op45, &op46, NULL,  &op48, &op49, &op4a, NULL,  &op4c, &op4d, &op4e, NULL, // 4
+&op50, &op51, &op52, NULL,  &op54, &op55, &op56, NULL,  &op58, &op59, &op5a, NULL,  &op5c, &op5d, &op5e, NULL, // 5
+&op60, &op61, &op62, NULL,  &op64, &op65, &op66, NULL,  &op68, &op69, &op6a, NULL,  &op6c, &op6d, &op6e, NULL, // 6
+&op70, &op71, &op72, NULL,  &op74, &op75, &op76, NULL,  &op78, &op79, &op7a, NULL,  &op7c, &op7d, &op7e, NULL, // 7
 &op80, &op81, &op82, NULL,  &op84, &op85, &op86, &op87, &op88, &op89, &op8a, &op8b, &op8c, &op8d, &op8e, &op8f,// 8
 &op90, &op91, &op92, NULL,  &op94, &op95, &op96, NULL,  &op98, &op99, &op9a, NULL,  NULL,  &op9d, NULL,  NULL, // 9
 &opa0, &opa1, &opa2, NULL,  &opa4, &opa5, &opa6, &opa7, &opa8, &opa9, &opaa, &opab, &opac, &opad, &opae, &opaf,// a
 &opb0, &opb1, &opb2, NULL,  &opb4, &opb5, &opb6, &opb6, &opb8, &opb9, &opba, NULL,  &opbc, &opbd, &opbe, &opbf,// b
 &opc0, &opc1, &opc2, NULL,  &opc4, &opc5, &opc6, NULL,  &opc8, &opc9, &opca, NULL,  &opcc, &opcd, &opce, NULL, // c
-&opd0, &opd1, &opd2, NULL,  &opd4, &opd5, NULL,  NULL,  &opd8, &opd9, &opda, NULL,  &opdc, &opdd, &opde, NULL, // d
+&opd0, &opd1, &opd2, NULL,  &opd4, &opd5, &opd6, NULL,  &opd8, &opd9, &opda, NULL,  &opdc, &opdd, &opde, NULL, // d
 &ope0, &ope1, &ope2, NULL,  &ope4, &ope5, &ope6, NULL,  &ope8, &ope9, &opea, NULL,  &opec, &oped, &opee, NULL, // e
-&opf0, &opf1, &opf2, NULL,  &opf4, &opf5, NULL,  NULL,  &opf8, &opf9, &opfa, NULL,  &opfc, &opfd, &opfe, NULL  // f
-// LOW NYBBLE MISS
-// 0	00
-// 6	ALL NULL
-// e	ALL NULL EXCEPT 9E
+&opf0, &opf1, &opf2, NULL,  &opf4, &opf5, &opf6, NULL,  &opf8, &opf9, &opfa, NULL,  &opfc, &opfd, &opfe, NULL  // f
 };
 
 uint32_t times[] = {
@@ -1015,20 +1009,18 @@ void tick(j65_t* cpu) {
 	if(cpu->ITC == 1) {
 		// TODO run code cycle end
 		uint8_t copc = cpu->memmap[cpu->PC];
+		cpu->ITC = times[copc];
 		if(opcodes[copc] != NULL) {
 			#ifndef NOLIBC
-			printf("Opcode 0x%X at 0x%X\n", copc, cpu->PC);
+			printf("Opcode 0x%02X at 0x%04X\n", copc, cpu->PC);
 			#endif
-			cpu->ITC = times[copc];
 			opcodes[copc](cpu);
-			cpu->PC+=pcinc[copc];
 		} else {
 			#ifndef NOLIBC
-			cpu->ITC = 2;
-			printf("NULL Ocpu->PCODE: 0x%X. It will be replaced by NOP. This *will* break the program counter!\ncpu->PC: 0x%X\n", (uint8_t) cpu->memmap[cpu->PC+1], cpu->PC);
+			printf("NULL Ocpu->PCODE: 0x%02X. It will be replaced by NOP.\ncpu->PC: 0x%04X\n", copc, cpu->PC);
 			#endif
-			opea(cpu);
 		}
+		cpu->PC+=pcinc[copc];
 	}
 	cpu->ITC--;
 }

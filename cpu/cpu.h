@@ -23,12 +23,21 @@
 // CPU REGISTERS
 
 typedef struct cpu {
+	// same as the 6502 reg names
 	uint16_t PC;
 	uint8_t	S;
 	uint8_t A;
 	uint8_t X;
 	uint8_t Y;
 	uint8_t P;
+	/* Interrupt flag
+	 * VALUE	INTERRUPT TYPE		INTERRUPT VECTOR (LSB,MSB)
+	 * 0 		no interrupt		N/A
+	 * 1		Non-Maskable Interrupt	0xFFFA,0xFFFB
+	 * 2		Processor Reset		0xFFFC,0xFFFD
+	 * 3		Interrupt Request	0xFFFE,0xFFFF
+	 */
+	uint8_t I;
 	uint8_t ITC;
 	uint8_t *memmap;
 	uint8_t *stack;

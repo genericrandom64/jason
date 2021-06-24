@@ -200,5 +200,35 @@ uint16_t indexed_indirect(j65_t* cpu, uint8_t zpg) {
 	return indirect(cpu, (uint8_t)zpg+cpu->X);
 }
 
+void set_carry_low(j65_t* cpu, uint8_t i) {
+	if((i & 0b00000001) != 0) {
+		cpu->P |= SET_P_CARRY;
+	} else {
+		cpu->P &= MASK_P_CARRY;
+	}
+}
+
+void lsr(j65_t* cpu, uint8_t i) {
+	set_carry_low(cpu, i);
+	cpu->A = i >> 1;
+	chknegative(cpu, cpu->A);
+	chkzero(cpu, cpu->A)
+}
+
+void rol(j65_t* cpu, uint8_t i) { // the 65816 version should be called rl2, heh
+	uint8_t tmp = cpu->P & SET_P_CARRY;
+	chkcarry(cpu, cpu->A);
+	cpu->A = i << 1;
+	if(tmp != 0) cpu->A |= 1;
+	chkzero(cpu, cpu->A)
+}
+
+void ror(j65_t* cpu, uint8_t i) {
+	uint8_t tmp = cpu->P & SET_P_CARRY;
+	set_carry_low(cpu, i);
+	cpu->A = i >> 1;
+	if(tmp != 0) cpu->A |= 0b10000000;
+	chkzero(cpu, cpu->A)
+}
 
 #endif
