@@ -9,7 +9,7 @@
 CC = cc
 
 # define any compile-time flags
-CFLAGS = -Wall -ggdb3 -Wextra
+CFLAGS = -Wall -ggdb3 -Wextra -O2
 # TODO test with -Wpedantic
 
 # define any directories containing header files other than /usr/include

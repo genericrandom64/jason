@@ -1,20 +1,26 @@
-/* J65: 6502-based chip emulator
+/* j65: 6502 chip emulator
  *
  * Supported chips:
+ * 	NMOS_6502	(KIM-1, PET, VIC-20 emulation)
+ *	(TODO does not support ROR bug)
+ * 	+	This is the current focus and is supported except for
+ * 		interrupts and BCD. Bugfixes for it will be accepted.
  *
  * WIP chips:
- * 	MOS 6502	(KIM-1, PET, VIC-20 emulation)
- * 	+	This is the current focus.
  *
- * 	WDC 65C02	(Modern 65c02 system emulation)
- * 	WDC 65sc02
+ *	NMOS_6507	(Atari VCS)
+ *	(TODO address width hack)
+ * 	
+ * 	WDC_65C02	(Modern 65c02 system emulation)
+ *
+ * 	WDC_65SC02
  * 	+	This will be implemented with an opcode map. It's
  *		secondary but should be done when the 6502 is done.
  *
- * 	Ricoh 2A03	(Is the code still heavily based on NES memory mappings?)
+ * 	RICOH_2A03	(Is the code still heavily based on NES memory mappings?)
  *
  * Planned support:
- * 	WDC 65C816	(SNES emulation)
+ * 	WDC_65C816	(SNES emulation)
  *
  * by genericrandom64
  * Public-domain software
@@ -23,10 +29,6 @@
 // TODO might have added pagebound ITCs where unnecessary? check *9 and *D
 #define NMOS_6502
 #include "cpu.h"
-
-#ifdef NES
-#define NOBCD // 2A03 does not support BCD
-#endif
 
 /* ADDR		TYPE
  * 0000h-07FFh	WRAM (this is where the zero page and stack is)
@@ -44,8 +46,8 @@
  */
 
 void j65_init(j65_t* cpu) {
-	cpu->PC = 0;
-	cpu->ITC = 1; // TODO zero
+	cpu->PC = 0; // TODO set correct entry point with an indirection
+	cpu->ITC = 6;
 	cpu->P = 0;
 	cpu->S = 255;
 	cpu->I = 0;
@@ -60,18 +62,23 @@ void (*srqh)(uint8_t a, uint8_t b) = NULL;
 
 #include "internal/common.h"
 
+// TODO verify nolibc mode
 // TODO interrupts
 // TODO create document detailing every 6502 opcode
 // TODO review all abs,Z functions with pagebounds to check for errors in page handling
 // TODO does the 65c02 have different cycle times?
-// TODO use some damn pointers
 // TODO 2 stage pipeline?
 // https://retrocomputing.stackexchange.com/questions/5369/how-does-the-6502-implement-its-branch-instructions
 // TODO simulate open bus on unmapped addresses
 // TODO formulate a not-too-hacky way of simulating mirrored memory
-// TODO implement overflow, negative statuses in math ops
-// TODO check that chkzero is used where needed
-// TODO functions missing zero/negative checks
+// TODO check that all ops handle P correctly
+
+void op00(j65_t* cpu) {
+	return; // TODO test this
+	cpu->P |= SET_P_B1; // j65 cannot use this but things built with it might be able to
+	cpu->I |= 4; // software interrupt (IRQ)
+	interrupt(cpu, 0xFFFE);
+}
 
 void op01(j65_t* cpu) {
 	or(cpu, cpu->memmap[indexed_indirect(cpu, cpu->memmap[cpu->PC+1])]);
@@ -173,9 +180,7 @@ void op4c(j65_t* cpu) {
 
 void op20(j65_t* cpu) {
 	// TODO i have no idea if this is right
-	cpu->stack[cpu->S] = (cpu->PC+2) >> 8;
-	cpu->stack[cpu->S-1] = (uint8_t)(cpu->PC+2);
-	cpu->S-=2;
+	push_stack(cpu);
 	op4c(cpu);
 }
 
@@ -738,7 +743,7 @@ void opc6(j65_t* cpu) {
 	tmp--;
 	cpu->memmap[cpu->memmap[cpu->PC+1]]--;
 	chknegative(cpu, tmp);
-	if(tmp == 0) {cpu->P |= SET_P_ZERO;} else {cpu->P &= MASK_P_ZERO;}
+	chkzero(cpu, tmp);
 }
 
 void opc8(j65_t* cpu) {
@@ -768,7 +773,7 @@ void opce(j65_t* cpu) {
 	tmp--;
 	cpu->memmap[short2addr(cpu->PC+1, cpu->PC+2)]--;
 	chknegative(cpu, tmp);
-	if(tmp == 0) {cpu->P |= SET_P_ZERO;} else {cpu->P &= MASK_P_ZERO;}
+	chkzero(cpu, tmp);
 }
 
 void opd1(j65_t* cpu) {
@@ -824,7 +829,7 @@ void opdd(j65_t* cpu) {
 void opde(j65_t* cpu) {
 	cpu->memmap[short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2])+cpu->X]--;
 	uint8_t tmp = cpu->memmap[short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2])+cpu->X];
-	if(tmp == 0) {cpu->P |= SET_P_ZERO;} else {cpu->P &= MASK_P_ZERO;}
+	chkzero(cpu, tmp);
 	chknegative(cpu, tmp);
 }
 
@@ -852,7 +857,7 @@ void ope6(j65_t* cpu) {
 	tmp++;
 	cpu->memmap[cpu->PC+1]++;
 	chknegative(cpu, tmp);
-	if(tmp == 0) {cpu->P |= SET_P_ZERO;} else {cpu->P &= MASK_P_ZERO;}
+	chkzero(cpu, tmp);
 }
 
 void ope8(j65_t* cpu) {
@@ -877,7 +882,7 @@ void opee(j65_t* cpu) {
 	uint8_t tmp = cpu->memmap[short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2])] + 1;
 	cpu->memmap[short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2])] = tmp;
 	chknegative(cpu, tmp);
-	if(tmp == 0) {cpu->P |= SET_P_ZERO;} else {cpu->P &= MASK_P_ZERO;}
+	chkzero(cpu, tmp);
 }
 
 void opf0(j65_t* cpu) {
@@ -933,7 +938,7 @@ void opfd(j65_t* cpu) {
 void opfe(j65_t* cpu) {
 	cpu->memmap[short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2])+cpu->X]++;
 	uint8_t tmp = cpu->memmap[short2addr(cpu->memmap[cpu->PC+1], cpu->memmap[cpu->PC+2])+cpu->X];
-	if(tmp == 0) {cpu->P |= SET_P_ZERO;} else {cpu->P &= MASK_P_ZERO;}
+	chkzero(cpu, tmp);
 	chknegative(cpu, tmp);
 }
 
@@ -942,7 +947,7 @@ void opfe(j65_t* cpu) {
 // opcode map for tick() to use
 function_pointer_array opcodes[] = {
 //  0  1      2      3      4      5      6      7      8      9      a      b      c      d      e      f
-NULL,  &op01, &op02, NULL,  &op04, &op05, &op06, NULL,  &op08, &op09, &op0a, NULL,  &op0c, &op0d, &op0e, NULL, // 0
+&op00, &op01, &op02, NULL,  &op04, &op05, &op06, NULL,  &op08, &op09, &op0a, NULL,  &op0c, &op0d, &op0e, NULL, // 0
 &op10, &op11, &op12, NULL,  &op14, &op15, &op16, NULL,  &op18, &op19, &op1a, NULL,  &op1c, &op1d, &op1e, NULL, // 1
 &op20, &op21, &op22, NULL,  &op24, &op25, &op26, NULL,  &op28, &op29, &op2a, NULL,  &op2c, &op2d, &op2e, NULL, // 2
 &op30, &op31, &op32, NULL,  &op34, &op35, &op36, NULL,  &op38, &op39, &op3a, NULL,  &op3c, &op3d, &op3e, NULL, // 3
@@ -1003,11 +1008,25 @@ uint8_t pcinc[] = {
 #endif
 
 #ifdef WDC_65C02
+
+// TODO
+#error no 65c02 map
+
 #endif
 
 void tick(j65_t* cpu) {
 	if(cpu->ITC == 1) {
 		// TODO run code cycle end
+		if((cpu->I) != 0 && (cpu->P & SET_P_INT) == 0) {
+			// TODO this should not trigger given an IRQ
+			// TODO emulate 6502 interrupt bugs like hijacking
+			#ifndef NOLIBC
+			printf("INTERRUPT\n");
+			#endif
+			uint16_t vec = 0xFFFC;
+			if((cpu->I & 4) != 0) vec = 0xFFFC;
+			interrupt(cpu, vec);
+		}
 		uint8_t copc = cpu->memmap[cpu->PC];
 		cpu->ITC = times[copc];
 		if(opcodes[copc] != NULL) {
@@ -1017,7 +1036,7 @@ void tick(j65_t* cpu) {
 			opcodes[copc](cpu);
 		} else {
 			#ifndef NOLIBC
-			printf("NULL Ocpu->PCODE: 0x%02X. It will be replaced by NOP.\ncpu->PC: 0x%04X\n", copc, cpu->PC);
+			printf("NULL OPCODE: 0x%02X. It will be replaced by NOP.\ncpu->PC: 0x%04X\n", copc, cpu->PC);
 			#endif
 		}
 		cpu->PC+=pcinc[copc];

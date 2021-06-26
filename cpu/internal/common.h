@@ -85,13 +85,10 @@ void system_request(j65_t* cpu, uint8_t caller, uint8_t data) {
 		printf("Unhandled System Request: 0x%X 0x%X\n", caller, data);
 		#endif
 		// TODO give greater indication to program that processor has jammed
-		// as it is, jams just don't change the PC, but in the future they should do more
-		// simulate jams
 		if((cpu->memmap[cpu->PC] & 0x0F) == 0x2) {
-			// TODO we need a MCM
 			// yknow that clip from like carnival night zone? well thats what we're doing
 			#ifndef NOLIBC
-			printf("JAM! If there was a machine code monitor, it would be opened now.\n");
+			printf("JAM! If there is a machine code monitor, now is the time to open it..\n");
 			#endif
 		}
 	}
@@ -117,9 +114,6 @@ void branch(j65_t* cpu) {
 }
 
 uint8_t zpz(uint8_t base, uint8_t index) {
-	// base is a register, index is 00h-FFh which *presumably* overflows and isnt signed?
-	// TODO that
-	// TODO am i using it right?
 	return base + index;
 }
 
@@ -229,6 +223,22 @@ void ror(j65_t* cpu, uint8_t i) {
 	cpu->A = i >> 1;
 	if(tmp != 0) cpu->A |= 0b10000000;
 	chkzero(cpu, cpu->A)
+}
+
+void push_stack(j65_t* cpu) {
+	cpu->stack[cpu->S] = (cpu->PC+2) >> 8;
+	cpu->stack[cpu->S-1] = (uint8_t)(cpu->PC+2);
+	cpu->S-=2;
+}
+
+void interrupt(j65_t* cpu, uint16_t vector) {
+	// TODO check needed here?
+	// if((P & SET_P_INT) == 0) {
+	push_stack(cpu);
+	op08(cpu);
+	cpu->P |= SET_P_INT;
+	cpu->PC = vector;
+	// }
 }
 
 #endif
